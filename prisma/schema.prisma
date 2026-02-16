@@ -1,0 +1,131 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  superadmin
+  admin
+  loja
+}
+
+model Usuario {
+  id        String   @id @default(uuid()) @db.Uuid
+  nome      String
+  email     String   @unique
+  senha     String
+  role      Role     @default(loja)
+  lojaId    String?  @unique @map("loja_id") @db.Uuid  // ← @unique é obrigatório para 1:1
+  loja      Loja?    @relation(fields: [lojaId], references: [id])  // ← Relação definida AQUI
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("usuarios")
+}
+
+enum CategoriaLoja {
+  RESTAURANTE
+  SUPERMERCADO
+  PADARIA
+  LOJA_DE_ROUPAS
+  ELETRONICOS
+  OUTROS
+}
+
+model Loja {
+  id          String   @id @default(uuid()) @db.Uuid
+  nome        String
+  email       String   @unique
+  senha       String
+  logo        String
+  payment     Boolean  @default(false)
+  categoria   CategoriaLoja
+  descricao   String
+  usuario     Usuario? // ← APENAS o campo, SEM @relation!
+  cupons      Cupom[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  ultimoLogin DateTime? @map("ultimo_login")
+
+  @@map("lojas")
+}
+
+model Cliente {
+  id             String    @id @default(uuid()) @db.Uuid
+  nome           String
+  email          String    @unique
+  senha          String
+  whatsapp       String   
+  bairro         String
+  cidade         String
+  estado         String
+  pais           String   @default("Brasil")
+  genero         String
+  dataNascimento DateTime @map("data_nascimento")
+  instagram      String?
+  facebook       String?
+  tiktok         String?
+  receberOfertas Boolean   @default(true) @map("receber_ofertas")
+  comoConheceu   String?   @map("como_conheceu")
+  ativo          Boolean   @default(true)
+  observacoes    String?   @db.Text
+  resgates       Resgate[]
+  qrCodesUsados  QrCodeUsado[] // ← RELAÇÃO INVERSA ADICIONADA!
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  ultimoLogin    DateTime? @map("ultimo_login")
+
+  @@map("clientes")
+}
+ 
+model Cupom {
+  id                   String        @id @default(uuid()) @db.Uuid
+  codigo               String        @unique
+  descricao            String
+  quantidadePorCliente Int           @map("quantidade_por_cliente")
+  dataExpiracao        DateTime      @map("data_expiracao")
+  lojaId               String        @map("loja_id") @db.Uuid
+  loja                 Loja          @relation(fields: [lojaId], references: [id])
+  logo                 String
+  totalQrCodes         Int           @default(1000) @map("total_qr_codes")
+  qrCodesUsados        Int           @default(0) @map("qr_codes_usados")
+  resgates             Resgate[]
+  qrCodesUsadosList    QrCodeUsado[] // ← RELAÇÃO INVERSA ADICIONADA!
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+
+  @@map("cupons")
+}
+
+model QrCodeUsado {
+  id        String   @id @default(uuid()) @db.Uuid
+  cupomId   String   @map("cupom_id") @db.Uuid
+  cupom     Cupom    @relation(fields: [cupomId], references: [id])
+  codigo    String   @unique
+  clienteId String   @map("cliente_id") @db.Uuid
+  cliente   Cliente  @relation(fields: [clienteId], references: [id])
+  usadoEm   DateTime @default(now()) @map("usado_em")
+  validadoEm DateTime? @map("validado_em")  // ← NOVO CAMPO!
+  validado  Boolean  @default(false) @map("validado") // ← NOVO CAMPO!
+
+  @@map("qrcodes_usados")
+}
+
+ 
+model Resgate {
+  id          String   @id @default(uuid()) @db.Uuid
+  clienteId   String   @map("cliente_id") @db.Uuid
+  cupomId     String   @map("cupom_id") @db.Uuid
+  quantidade  Int      @default(1)
+  cliente     Cliente  @relation(fields: [clienteId], references: [id])
+  cupom       Cupom    @relation(fields: [cupomId], references: [id])
+  resgatadoEm DateTime @default(now()) @map("resgatado_em")
+
+  @@unique([clienteId, cupomId])
+  @@map("resgates")
+}
