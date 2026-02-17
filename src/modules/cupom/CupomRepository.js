@@ -7,20 +7,23 @@ class CupomRepository {
   }
 
   findAll() {
-    return prisma.cupom.findMany({
-      include: {
-        loja: {
-          select: {
-            id: true,
-            nome: true,
-            logo: true,
-            payment: true
-          }
+  return prisma.cupom.findMany({
+    include: {
+      loja: {
+        select: {
+          id: true,
+          nome: true,
+          logo: true,
+          payment: true
         }
       },
-      orderBy: { createdAt: 'desc' }
-    });
-  }
+      _count: {
+        select: { resgates: true }  // ← ADICIONAR ISSO!
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+}
 
   findById(id) {
     return prisma.cupom.findUnique({

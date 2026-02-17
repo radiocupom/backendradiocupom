@@ -94,15 +94,33 @@ class CupomController {
   };
 
   update = async (req, res) => {
-    try {
-      const { id } = req.params;
-      const data = req.body;
-      const cupom = await this.service.updateCupom(id, data, req.user);
-      res.json(cupom);
-    } catch (err) {
-      res.status(400).json({ error: err.message });
+  console.log('📥 [update] Requisição recebida - ID:', req.params.id);
+  console.log('📦 [update] Body recebido:', req.body);
+  console.log('📎 [update] File recebido:', req.file);
+  console.log('👤 [update] Usuário:', req.user?.id, req.user?.role);
+  
+  try {
+    const { id } = req.params;
+    const data = { ...req.body };
+    
+    // Se tiver arquivo, adicionar o caminho
+    if (req.file) {
+      data.logo = req.file.path;
+      console.log('🖼️ [update] Logo atualizada:', data.logo);
     }
-  };
+    
+    console.log('📝 [update] Dados processados:', data);
+    
+    const cupom = await this.service.updateCupom(id, data, req.user);
+    console.log('✅ [update] Cupom atualizado:', cupom.id);
+    
+    res.json(cupom);
+  } catch (err) {
+    console.error('❌ [update] Erro:', err.message);
+    console.error('❌ [update] Stack:', err.stack);
+    res.status(400).json({ error: err.message });
+  }
+};
 
   delete = async (req, res) => {
     try {

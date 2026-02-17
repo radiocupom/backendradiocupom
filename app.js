@@ -1,5 +1,6 @@
 const express = require("express");
-const cors = require("cors"); // Importar o CORS
+const path = require("path"); // ← ADICIONAR!
+const cors = require("cors");
 const lojaRouter = require('./src/modules/loja/lojaRouter');
 const usuarioRouter = require('./src/modules/usuario/usuarioRouter');
 const clienteRouter = require('./src/modules/cliente/ClienteRouter');
@@ -11,11 +12,14 @@ const app = express();
 
 // Configuração do CORS
 app.use(cors({
-  origin: 'http://localhost:3000', // URL do seu frontend
-  credentials: true, // Permitir envio de cookies/tokens
+  origin: 'http://localhost:3000',
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+
+// 🔥 IMPORTANTE: Servir arquivos estáticos da pasta uploads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use(express.json());
 

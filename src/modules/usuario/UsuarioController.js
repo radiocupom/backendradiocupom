@@ -1,7 +1,6 @@
-// src/modules/usuario/usuarioController.js
 const {
   criarUsuario,
-  autenticar,  // ← Isso agora retorna { usuario, token }
+  autenticar,
   findAllUsuarios,
   findUsuarioById,
   updateUsuario,
@@ -21,7 +20,6 @@ const register = async (req, res) => {
   }
 };
 
-// ✅ MÉTODO LOGIN AJUSTADO (se existir no controller de usuário)
 const login = async (req, res) => {
   try {
     const { email, senha } = req.body;
@@ -57,19 +55,34 @@ const getById = async (req, res) => {
   }
 };
 
+// 🔥 MÉTODO UPDATE COM LOGS
 const update = async (req, res) => {
+  console.log('📥 [update] Requisição recebida - ID:', req.params.id);
+  console.log('📦 [update] Body recebido:', req.body);
+  console.log('👤 [update] Usuário autenticado:', req.user?.id, req.user?.role);
+  
   try {
     const { id } = req.params;
     const data = { ...req.body };
     
+    console.log('📝 [update] Dados processados:', data);
+    
     if (data.senha) {
+      console.log('🔐 [update] Senha fornecida, aplicando hash');
       data.senha = await bcrypt.hash(data.senha, 10);
+      console.log('✅ [update] Hash gerado com sucesso');
     }
     
+    console.log('🔄 [update] Chamando updateUsuario...');
     const usuarioAtualizado = await updateUsuario(id, data);
+    console.log('✅ [update] Usuário atualizado com sucesso:', usuarioAtualizado.id);
+    
     const { senha, ...usuarioSemSenha } = usuarioAtualizado;
     res.json(usuarioSemSenha);
+    
   } catch (err) {
+    console.error('❌ [update] Erro:', err.message);
+    console.error('❌ [update] Stack:', err.stack);
     res.status(400).json({ error: err.message });
   }
 };
@@ -96,7 +109,7 @@ const getPerfil = async (req, res) => {
 
 module.exports = {
   register,
-  login,  // ← Se você tiver rota de login no usuário
+  login,
   getAll,
   getById,
   update,

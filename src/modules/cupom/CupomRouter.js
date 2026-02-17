@@ -56,10 +56,10 @@ router.get('/:id',
   controller.getById
 );
 
-// Atualizar
 router.put('/:id',
   authenticateToken,
   authorizeRoles('superadmin', 'admin', 'loja'),
+  upload.single('logo'),  // ← ISSO ESTAVA FALTANDO!
   controller.update
 );
 

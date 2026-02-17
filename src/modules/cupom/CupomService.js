@@ -156,41 +156,68 @@ class CupomService {
     });
   }
 
-  async updateCupom(id, data, usuarioLogado = null) {
-    const cupom = await prisma.cupom.findUnique({
-      where: { id }
+ async updateCupom(id, data, usuarioLogado = null) {
+  console.log('🔄 [service] Atualizando cupom:', id);
+  console.log('📦 [service] Dados recebidos:', data);
+  
+  const cupom = await prisma.cupom.findUnique({
+    where: { id }
+  });
+  
+  if (!cupom) throw new Error('Cupom não encontrado');
+  console.log('✅ [service] Cupom encontrado:', cupom.codigo);
+
+  // Verificar permissão para lojista
+  if (usuarioLogado?.role === 'loja') {
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: usuarioLogado.id },
+      include: { loja: true }
     });
     
-    if (!cupom) throw new Error('Cupom não encontrado');
-
-    // Verificar permissão para lojista
-    if (usuarioLogado?.role === 'loja') {
-      const usuario = await prisma.usuario.findUnique({
-        where: { id: usuarioLogado.id },
-        include: { loja: true }
-      });
-      
-      if (cupom.lojaId !== usuario.loja?.id) {
-        throw new Error('Você só pode atualizar cupons da sua própria loja');
-      }
+    if (cupom.lojaId !== usuario.loja?.id) {
+      throw new Error('Você só pode atualizar cupons da sua própria loja');
     }
+    console.log('✅ [service] Permissão verificada para lojista');
+  }
 
-    if (data.codigo && data.codigo !== cupom.codigo) {
-      const existing = await prisma.cupom.findUnique({
-        where: { codigo: data.codigo }
-      });
-      if (existing) throw new Error('Código de cupom já existe');
-    }
+  // Verificar se código já existe (se estiver mudando)
+  if (data.codigo && data.codigo !== cupom.codigo) {
+    console.log('🔍 [service] Verificando código duplicado:', data.codigo);
+    const existing = await prisma.cupom.findUnique({
+      where: { codigo: data.codigo }
+    });
+    if (existing) throw new Error('Código de cupom já existe');
+    console.log('✅ [service] Código disponível');
+  }
 
-    if (data.dataExpiracao && new Date(data.dataExpiracao) <= new Date()) {
+  // Verificar data de expiração (se estiver mudando)
+  if (data.dataExpiracao) {
+    const dataExp = new Date(data.dataExpiracao);
+    if (dataExp <= new Date()) {
       throw new Error('Data de expiração deve ser futura');
     }
-
-    return prisma.cupom.update({
-      where: { id },
-      data
-    });
+    console.log('✅ [service] Data de expiração válida');
   }
+
+  // 🔥 CORREÇÃO: preparar dados para atualização
+  const updateData = {};
+  
+  if (data.codigo) updateData.codigo = data.codigo;
+  if (data.descricao) updateData.descricao = data.descricao;
+  if (data.quantidadePorCliente) updateData.quantidadePorCliente = parseInt(data.quantidadePorCliente);
+  if (data.dataExpiracao) updateData.dataExpiracao = new Date(data.dataExpiracao);
+  if (data.logo) updateData.logo = data.logo;
+
+  console.log('📝 [service] Dados para update:', updateData);
+
+  const cupomAtualizado = await prisma.cupom.update({
+    where: { id },
+    data: updateData
+  });
+
+  console.log('✅ [service] Cupom atualizado com sucesso');
+  return cupomAtualizado;
+}
 
   async deleteCupom(id, usuarioLogado = null) {
     const cupom = await prisma.cupom.findUnique({
@@ -217,41 +244,40 @@ class CupomService {
   }
 
   async gerarQrCodes(id, quantidade = 1, usuarioLogado = null) {
-    const cupom = await prisma.cupom.findUnique({
-      where: { id }
+  const cupom = await prisma.cupom.findUnique({
+    where: { id }
+  });
+  
+  if (!cupom) throw new Error('Cupom não encontrado');
+
+  // Verificar permissão para lojista
+  if (usuarioLogado?.role === 'loja') {
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: usuarioLogado.id },
+      include: { loja: true }
     });
     
-    if (!cupom) throw new Error('Cupom não encontrado');
-
-    // Verificar permissão para lojista
-    if (usuarioLogado?.role === 'loja') {
-      const usuario = await prisma.usuario.findUnique({
-        where: { id: usuarioLogado.id },
-        include: { loja: true }
-      });
-      
-      if (cupom.lojaId !== usuario.loja?.id) {
-        throw new Error('Você só pode gerar QR codes para cupons da sua própria loja');
-      }
+    if (cupom.lojaId !== usuario.loja?.id) {
+      throw new Error('Você só pode gerar QR codes para cupons da sua própria loja');
     }
-
-    // ✅ ATUALIZAR: Aumenta o total de QR codes disponíveis
-    const cupomAtualizado = await prisma.cupom.update({
-      where: { id },
-      data: {
-        totalQrCodes: {
-          increment: parseInt(quantidade)
-        }
-      }
-    });
-
-    return {
-      mensagem: `${quantidade} QR codes adicionados. Total agora: ${cupomAtualizado.totalQrCodes}`,
-      totalQrCodes: cupomAtualizado.totalQrCodes,
-      qrCodesUsados: cupomAtualizado.qrCodesUsados
-    };
   }
 
+  // ✅ ATUALIZAR: Aumenta o total de QR codes disponíveis
+  const cupomAtualizado = await prisma.cupom.update({
+    where: { id },
+    data: {
+      totalQrCodes: {
+        increment: parseInt(quantidade)
+      }
+    }
+  });
+
+  return {
+    mensagem: `${quantidade} QR codes adicionados. Total agora: ${cupomAtualizado.totalQrCodes}`,
+    totalQrCodes: cupomAtualizado.totalQrCodes,
+    qrCodesUsados: cupomAtualizado.qrCodesUsados
+  };
+}
   async getEstatisticas(id, usuarioLogado = null) {
     const cupom = await prisma.cupom.findUnique({
       where: { id },
