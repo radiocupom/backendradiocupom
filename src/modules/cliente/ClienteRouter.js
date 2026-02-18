@@ -68,4 +68,11 @@ router.delete('/:id',
   controller.delete
 );
 
+// 🔥 NOVA ROTA: Listar clientes da loja (para o dashboard do lojista)
+router.get('/loja/:lojaId/clientes', 
+  authenticateToken, 
+  authorizeRoles('loja', 'admin', 'superadmin'),
+  controller.getClientesByLoja
+);
+
 module.exports = router;

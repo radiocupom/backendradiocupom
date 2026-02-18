@@ -525,6 +525,188 @@ class FrontResgateController {
       });
     }
   };
+// ================= LISTAR RESGATES DA LOJA =================
+listarResgatesLoja = async (req, res) => {
+  try {
+    console.log('🔍 listarResgatesLoja - Iniciando');
+    console.log('👤 Usuário:', req.user);
+    
+    const usuarioId = req.user.id;
+    console.log('🔍 Usuário ID:', usuarioId);
+
+    // Buscar a loja do usuário
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      include: { loja: true }
+    });
+
+    console.log('🔍 Usuário encontrado:', usuario ? 'sim' : 'não');
+    
+    if (!usuario?.loja) {
+      console.log('❌ Lojista não possui loja associada');
+      return res.status(400).json({
+        success: false,
+        error: 'Lojista não possui uma loja associada'
+      });
+    }
+
+    const lojaId = usuario.loja.id;
+    console.log('🏪 Loja ID:', lojaId);
+
+    // Buscar todos os resgates dos cupons da loja
+    console.log('🔍 Buscando resgates...');
+    const resgates = await prisma.resgate.findMany({
+      where: {
+        cupom: {
+          lojaId: lojaId
+        }
+      },
+      include: {
+        cliente: {
+          select: {
+            id: true,
+            nome: true,
+            email: true,
+            whatsapp: true
+          }
+        },
+        cupom: {
+          select: {
+            id: true,
+            codigo: true,
+            descricao: true,
+            logo: true
+          }
+        }
+        // 🔥 REMOVA O BLOCO qrCodes COMPLETAMENTE
+      },
+      orderBy: {
+        resgatadoEm: 'desc'
+      }
+    });
+
+    console.log(`✅ Encontrados ${resgates.length} resgates`);
+
+    // Formatar os dados para o frontend
+    const resgatesFormatados = resgates.map(resgate => ({
+      id: resgate.id,
+      clienteId: resgate.cliente.id,
+      clienteNome: resgate.cliente.nome,
+      clienteEmail: resgate.cliente.email,
+      clienteWhatsapp: resgate.cliente.whatsapp,
+      cupomId: resgate.cupom.id,
+      cupomCodigo: resgate.cupom.codigo,
+      cupomDescricao: resgate.cupom.descricao,
+      cupomLogo: resgate.cupom.logo,
+      quantidade: resgate.quantidade,
+      resgatadoEm: resgate.resgatadoEm,
+      // 🔥 TEMPORARIAMENTE SEM DADOS DE QR CODE
+      qrCodeId: null,
+      qrCodeValidado: false,
+      qrCodeValidadoEm: null
+    }));
+
+    res.json({
+      success: true,
+      data: resgatesFormatados
+    });
+
+  } catch (err) {
+    console.error('❌ Erro detalhado:', err);
+    console.error('❌ Stack:', err.stack);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao carregar resgates',
+      details: err.message
+    });
+  }
+};
+
+// ================= LISTAR QR CODES DA LOJA =================
+listarQrCodesLoja = async (req, res) => {
+  try {
+    console.log('🔍 listarQrCodesLoja - Iniciando');
+    
+    const usuarioId = req.user.id;
+
+    // Buscar a loja do usuário
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      include: { loja: true }
+    });
+
+    if (!usuario?.loja) {
+      return res.status(400).json({
+        success: false,
+        error: 'Lojista não possui uma loja associada'
+      });
+    }
+
+    const lojaId = usuario.loja.id;
+
+    // Buscar todos os QR codes dos cupons da loja
+    const qrCodes = await prisma.qrCodeUsado.findMany({
+      where: {
+        cupom: {
+          lojaId: lojaId
+        }
+      },
+      include: {
+        cupom: {
+          select: {
+            id: true,
+            codigo: true,
+            descricao: true,
+            logo: true
+          }
+        },
+        cliente: {
+          select: {
+            id: true,
+            nome: true,
+            email: true
+          }
+        }
+      },
+      orderBy: {
+        usadoEm: 'desc'
+      }
+    });
+
+    console.log(`✅ Encontrados ${qrCodes.length} QR codes`);
+
+    // Formatar os dados
+    const qrCodesFormatados = qrCodes.map(qr => ({
+      id: qr.id,
+      codigo: qr.codigo,
+      cupomId: qr.cupom.id,
+      cupomCodigo: qr.cupom.codigo,
+      cupomDescricao: qr.cupom.descricao,
+      cupomLogo: qr.cupom.logo,
+      usadoEm: qr.usadoEm,
+      validado: qr.validado,
+      validadoEm: qr.validadoEm,
+      cliente: qr.cliente ? {
+        id: qr.cliente.id,
+        nome: qr.cliente.nome,
+        email: qr.cliente.email
+      } : null
+    }));
+
+    res.json({
+      success: true,
+      data: qrCodesFormatados
+    });
+
+  } catch (err) {
+    console.error('❌ Erro ao listar QR codes:', err);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao carregar QR codes'
+    });
+  }
+};
+
 }
 
 module.exports = new FrontResgateController();

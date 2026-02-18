@@ -229,6 +229,49 @@ async autenticar(email, senha) {
     expiresIn: '30d'
   };
 }
+
+/**
+ * Buscar clientes que resgataram cupons de uma loja
+ */
+async getClientesByLoja(lojaId) {
+  const clientes = await prisma.cliente.findMany({
+    where: {
+      resgates: {
+        some: {
+          cupom: {
+            lojaId: lojaId
+          }
+        }
+      }
+    },
+    include: {
+      resgates: {
+        where: {
+          cupom: {
+            lojaId: lojaId
+          }
+        },
+        include: {
+          cupom: {
+            select: {
+              id: true,
+              codigo: true,
+              descricao: true,
+              logo: true
+            }
+          }
+        },
+        orderBy: {
+          resgatadoEm: 'desc'
+        }
+      }
+    }
+  });
+
+  // Remover senhas
+  return clientes.map(({ senha, ...cliente }) => cliente);
+}
+
 }
 
 module.exports = ClienteService;

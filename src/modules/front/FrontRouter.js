@@ -29,4 +29,32 @@ router.post('/validar-qrcode',
   frontResgateController.validarQrCodeLoja
 );
 
+// ================= ROTAS PROTEGIDAS (LOJA) =================
+router.post('/validar-qrcode', 
+  authenticateToken, 
+  authorizeRoles('loja'),
+  frontResgateController.validarQrCodeLoja
+);
+
+// 🔥 NOVA ROTA: Listar resgates da loja
+router.get('/resgates/loja', 
+  authenticateToken, 
+  authorizeRoles('loja'),
+  frontResgateController.listarResgatesLoja
+);
+
+// ================= ROTAS PROTEGIDAS (LOJA) =================
+router.get('/resgates/loja', 
+  authenticateToken, 
+  authorizeRoles('loja'),
+  frontResgateController.listarResgatesLoja
+);
+
+// 🔥 NOVA ROTA: Listar QR codes da loja
+router.get('/qrcodes/loja', 
+  authenticateToken, 
+  authorizeRoles('loja'),
+  frontResgateController.listarQrCodesLoja
+);
+
 module.exports = router;
