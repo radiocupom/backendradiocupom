@@ -7,6 +7,7 @@ const clienteRouter = require('./src/modules/cliente/ClienteRouter');
 const cupomRouter = require('./src/modules/cupom/CupomRouter');
 const frontRouter = require('./src/modules/front/FrontRouter');
 const dashboardRouter = require('./src/modules/dashboard/dashboard.routes');
+const dashboardLojaRouter = require('./src/modules/dashboardLoja/dashboardLojaRouter');
 const authRoutes = require('./src/modules/auth/authRouter');
 
 const app = express();
@@ -31,6 +32,7 @@ app.use('/api/clientes', clienteRouter);
 app.use('/api/cupons', cupomRouter);
 app.use('/api/front', frontRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/dashboard-loja', dashboardLojaRouter);
 
 
 module.exports = app;

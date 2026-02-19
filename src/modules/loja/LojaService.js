@@ -188,12 +188,113 @@ class LojaService {
     return this.getLojaById(id);
   }
 
-  /**
-   * Atualiza loja
-   */
-/**
- * Atualiza loja
+ /**
+ * Lojista atualiza sua própria loja e seus dados de usuário
  */
+async atualizarMinhaLoja(usuarioId, data) {
+  console.log('📤 Atualizando loja e usuário:', { usuarioId, data });
+  
+  // Busca a loja associada ao usuário
+  const loja = await prisma.loja.findFirst({
+    where: { 
+      usuario: {
+        id: usuarioId
+      }
+    },
+    include: {
+      usuario: true
+    }
+  });
+  
+  if (!loja) {
+    throw new Error('Loja não encontrada para este usuário');
+  }
+  
+  console.log('🏪 Loja encontrada:', loja.id);
+  console.log('👤 Usuário associado:', loja.usuario.id);
+  
+  // Prepara dados para atualização da loja
+  const lojaUpdateData = {};
+  const usuarioUpdateData = {};
+  
+  // Dados da loja
+  if (data.nomeLoja) lojaUpdateData.nome = data.nomeLoja;
+  if (data.categoria) lojaUpdateData.categoria = data.categoria;
+  if (data.descricao) lojaUpdateData.descricao = data.descricao;
+  if (data.logo) lojaUpdateData.logo = data.logo;
+  
+  // Dados do usuário
+  if (data.nomeUsuario) usuarioUpdateData.nome = data.nomeUsuario;
+  if (data.emailUsuario) {
+    // Verifica se o email já existe
+    const existingUser = await prisma.usuario.findFirst({
+      where: { 
+        email: data.emailUsuario,
+        NOT: { id: loja.usuario.id }
+      }
+    });
+    if (existingUser) throw new Error('Email de usuário já cadastrado');
+    usuarioUpdateData.email = data.emailUsuario;
+  }
+  
+  if (data.senhaUsuario) {
+    if (data.senhaUsuario.length < 6) {
+      throw new Error('A senha deve ter no mínimo 6 caracteres');
+    }
+    usuarioUpdateData.senha = await bcrypt.hash(data.senhaUsuario, 10);
+  }
+  
+  console.log('📦 lojaUpdateData:', lojaUpdateData);
+  console.log('📦 usuarioUpdateData:', usuarioUpdateData);
+  
+  // Executa as atualizações em transação
+  const resultado = await prisma.$transaction(async (prismaTx) => {
+    // Atualiza loja se houver dados
+    let lojaAtualizada = loja;
+    if (Object.keys(lojaUpdateData).length > 0) {
+      lojaAtualizada = await prismaTx.loja.update({
+        where: { id: loja.id },
+        data: lojaUpdateData
+      });
+    }
+    
+    // Atualiza usuário se houver dados
+    let usuarioAtualizado = loja.usuario;
+    if (Object.keys(usuarioUpdateData).length > 0) {
+      usuarioAtualizado = await prismaTx.usuario.update({
+        where: { id: loja.usuario.id },
+        data: usuarioUpdateData
+      });
+    }
+    
+    return {
+      loja: lojaAtualizada,
+      usuario: usuarioAtualizado
+    };
+  });
+  
+  // Busca os dados completos para retornar
+  const lojaCompleta = await prisma.loja.findUnique({
+    where: { id: loja.id },
+    include: {
+      usuario: {
+        select: {
+          id: true,
+          nome: true,
+          email: true,
+          role: true,
+          createdAt: true
+        }
+      }
+    }
+  });
+  
+  // Remove a senha
+  const { senha, ...lojaSemSenha } = lojaCompleta;
+  
+  return lojaSemSenha;
+}
+
 /**
  * Atualiza loja
  */

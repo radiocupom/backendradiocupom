@@ -123,6 +123,58 @@ class LojaController {
   };
 
   /**
+ * Lojista atualiza sua própria loja
+ */
+updateMinhaLoja = async (req, res) => {
+  try {
+    const usuarioId = req.user.id;
+    
+    console.log('🟣 Controller - req.body COMPLETO:', req.body);
+    console.log('🟣 Controller - req.file:', req.file);
+    console.log('🟣 Controller - req.headers.content-type:', req.headers['content-type']);
+    
+    const data = {};
+    
+    // Dados da loja
+    if (req.body.nomeLoja) data.nomeLoja = req.body.nomeLoja;
+    if (req.body.categoria) data.categoria = req.body.categoria;
+    if (req.body.descricao) data.descricao = req.body.descricao;
+    
+    // Dados do usuário - com logs para ver se estão chegando
+    console.log('🟣 Verificando nomeUsuario:', req.body.nomeUsuario);
+    if (req.body.nomeUsuario) {
+      console.log('🟣 nomeUsuario ENCONTRADO:', req.body.nomeUsuario);
+      data.nomeUsuario = req.body.nomeUsuario;
+    }
+    
+    console.log('🟣 Verificando emailUsuario:', req.body.emailUsuario);
+    if (req.body.emailUsuario) {
+      console.log('🟣 emailUsuario ENCONTRADO:', req.body.emailUsuario);
+      data.emailUsuario = req.body.emailUsuario;
+    }
+    
+    console.log('🟣 Verificando senhaUsuario:', req.body.senhaUsuario ? '******' : undefined);
+    if (req.body.senhaUsuario) {
+      data.senhaUsuario = req.body.senhaUsuario;
+    }
+    
+    // Logo
+    if (req.file) {
+      data.logo = req.file.path;
+    }
+    
+    console.log('🟣 Dados processados para o service:', data);
+    
+    const lojaAtualizada = await this.service.atualizarMinhaLoja(usuarioId, data);
+    
+    res.json(lojaAtualizada);
+  } catch (err) {
+    console.error('❌ Erro:', err);
+    res.status(400).json({ error: err.message });
+  }
+};
+
+  /**
    * Atualiza uma loja
    */
   update = async (req, res) => {

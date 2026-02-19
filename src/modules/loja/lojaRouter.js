@@ -77,6 +77,18 @@ router.get('/:id/com-usuario',
 );
 
 /**
+ * @route   PUT /api/lojas/minha-loja
+ * @desc    Lojista atualizar sua própria loja
+ * @access  Private (loja)
+ */
+router.put('/minha-loja', 
+  authenticateToken, 
+  authorizeRoles('loja'),  // <-- SÓ LOJISTA
+  upload.single('logo'),
+  controller.updateMinhaLoja
+);
+
+/**
  * @route   PUT /api/lojas/:id
  * @desc    Atualizar loja + upload de logo
  * @access  Private (superadmin, admin)
@@ -118,7 +130,7 @@ router.delete('/:id',
  */
 router.get('/:id/estatisticas',
   authenticateToken,
-  authorizeRoles('superadmin', 'admin'),
+  authorizeRoles('superadmin', 'admin', ),
   controller.getEstatisticas
 );
 
