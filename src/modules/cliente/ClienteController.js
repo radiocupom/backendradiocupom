@@ -215,21 +215,12 @@ getClientesByLoja = async (req, res) => {
   try {
     const { lojaId } = req.params;
     
-    // Verificar permissão (se for lojista, só pode ver sua própria loja)
-    if (req.user.role === 'loja') {
-      const usuario = await prisma.usuario.findUnique({
-        where: { id: req.user.id },
-        include: { loja: true }
-      });
-      
-      if (usuario?.loja?.id !== lojaId) {
-        return res.status(403).json({ 
-          error: 'Você só pode acessar clientes da sua própria loja' 
-        });
-      }
-    }
-
-    const clientes = await this.service.getClientesByLoja(lojaId);
+    // Passa os dados do usuário para o service verificar
+    const clientes = await this.service.getClientesByLoja(lojaId, {
+      userId: req.user?.id,
+      userRole: req.user?.role
+    });
+    
     res.json(clientes);
   } catch (err) {
     res.status(400).json({ error: err.message });

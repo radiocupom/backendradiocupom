@@ -233,43 +233,21 @@ async autenticar(email, senha) {
 /**
  * Buscar clientes que resgataram cupons de uma loja
  */
-async getClientesByLoja(lojaId) {
-  const clientes = await prisma.cliente.findMany({
-    where: {
-      resgates: {
-        some: {
-          cupom: {
-            lojaId: lojaId
-          }
-        }
-      }
-    },
-    include: {
-      resgates: {
-        where: {
-          cupom: {
-            lojaId: lojaId
-          }
-        },
-        include: {
-          cupom: {
-            select: {
-              id: true,
-              codigo: true,
-              descricao: true,
-              logo: true
-            }
-          }
-        },
-        orderBy: {
-          resgatadoEm: 'desc'
-        }
-      }
+async getClientesByLoja(lojaId, usuario) {
+  // Verificação de permissão no service
+  if (usuario.userRole === 'loja') {
+    // Use o repository para buscar o usuário
+    const lojaDoUsuario = await this.repository.findUsuarioWithLoja(usuario.userId);
+    
+    if (lojaDoUsuario?.loja?.id !== lojaId) {
+      throw new Error('Você só pode acessar clientes da sua própria loja');
     }
-  });
-
-  // Remover senhas
-  return clientes.map(({ senha, ...cliente }) => cliente);
+  }
+  
+  // Buscar clientes que resgataram cupons desta loja
+  const clientes = await this.repository.findClientesByLoja(lojaId);
+  
+  return clientes;
 }
 
 }

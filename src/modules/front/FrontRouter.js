@@ -29,12 +29,7 @@ router.post('/validar-qrcode',
   frontResgateController.validarQrCodeLoja
 );
 
-// ================= ROTAS PROTEGIDAS (LOJA) =================
-router.post('/validar-qrcode', 
-  authenticateToken, 
-  authorizeRoles('loja'),
-  frontResgateController.validarQrCodeLoja
-);
+ 
 
 // 🔥 NOVA ROTA: Listar resgates da loja
 router.get('/resgates/loja', 
