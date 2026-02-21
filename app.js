@@ -8,9 +8,10 @@ const cupomRouter = require('./src/modules/cupom/CupomRouter');
 const frontRouter = require('./src/modules/front/FrontRouter');
 const dashboardRouter = require('./src/modules/dashboard/dashboard.routes');
 const dashboardLojaRouter = require('./src/modules/dashboardLoja/dashboardLojaRouter');
+const dashboardClienteRouter = require('./src/modules/clienteDashboard/dashboard.routes');
 const { router: logsRouter } = require('./src/modules/logs/logsRouter');
 const { interceptConsole } = require('./src/middlewares/logInterceptor');
-const requestLogger = require('./src/middlewares/requestLogger'); // ← FALTAVA ESSA LINHA!
+const requestLogger = require('./src/middlewares/requestLogger'); 
 const authRoutes = require('./src/modules/auth/authRouter');
 
 const app = express();
@@ -62,6 +63,7 @@ app.use('/api/cupons', cupomRouter);
 app.use('/api/front', frontRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/dashboard-loja', dashboardLojaRouter);
+app.use('/api/dashboard/cliente', dashboardClienteRouter);
 app.use('/api/logs', logsRouter);
 
 module.exports = app;
