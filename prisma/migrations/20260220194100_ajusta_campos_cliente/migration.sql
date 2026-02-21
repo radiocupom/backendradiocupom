@@ -1,0 +1,7 @@
+-- AlterTable
+ALTER TABLE "clientes" ALTER COLUMN "bairro" DROP NOT NULL,
+ALTER COLUMN "cidade" DROP NOT NULL,
+ALTER COLUMN "data_nascimento" DROP NOT NULL,
+ALTER COLUMN "estado" DROP NOT NULL,
+ALTER COLUMN "genero" DROP NOT NULL,
+ALTER COLUMN "receber_ofertas" DROP NOT NULL;

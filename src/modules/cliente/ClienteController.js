@@ -6,63 +6,43 @@ class ClienteController {
   }
 
   // ================= ROTAS PÚBLICAS =================
+  // ClienteController.js
+create = async (req, res) => {
+  try {
+    console.log('📥 Recebendo requisição de cadastro:', {
+      body: req.body,
+      headers: req.headers['content-type']
+    });
 
-  // Criar cliente (público - registro)
-  create = async (req, res) => {
-    try {
-      const { 
-        nome, 
-        email, 
-        senha,
-        whatsapp,
-        bairro,
-        cidade,
-        estado,
-        genero,
-        dataNascimento,
-        pais,
-        instagram,
-        facebook,
-        tiktok,
-        receberOfertas,
-        comoConheceu,
-        observacoes
-      } = req.body;
+    const { 
+      nome, 
+      email, 
+      senha,
+      whatsapp
+    } = req.body;
 
-      // Validação básica
-      if (!nome || !email || !senha) {
-        return res.status(400).json({
-          error: 'Nome, email e senha são obrigatórios'
-        });
-      }
-
-      const cliente = await this.service.createCliente({ 
-        nome, 
-        email, 
-        senha,
-        whatsapp,
-        bairro,
-        cidade,
-        estado,
-        genero,
-        dataNascimento,
-        pais,
-        instagram,
-        facebook,
-        tiktok,
-        receberOfertas,
-        comoConheceu,
-        observacoes
+    // Validação básica
+    if (!nome || !email || !senha || !whatsapp) {
+      console.log('❌ Campos obrigatórios faltando:', { nome, email, senha, whatsapp });
+      return res.status(400).json({ 
+        error: 'Nome, email, senha e whatsapp são obrigatórios' 
       });
-      
-      res.status(201).json(cliente);
-    } catch (err) {
-      console.error('Erro ao criar cliente:', err);
-      res.status(400).json({ error: err.message });
     }
-  };
 
-  // Login do cliente (público) - ✅ ATUALIZADO para retornar token
+    const cliente = await this.service.createCliente(req.body);
+    
+    console.log('✅ Cliente criado com sucesso:', cliente.id);
+    res.status(201).json(cliente);
+    
+  } catch (err) {
+    console.error('❌ Erro no controller.create:', {
+      message: err.message,
+      stack: err.stack
+    });
+    res.status(400).json({ error: err.message });
+  }
+};
+
   login = async (req, res) => {
     try {
       const { email, senha } = req.body;
@@ -76,26 +56,24 @@ class ClienteController {
       res.json({ 
         success: true,
         message: 'Login realizado com sucesso',
-        data: {
-          cliente,
-          token,
-          expiresIn
-        }
+        data: { cliente, token, expiresIn }
       });
     } catch (err) {
-      res.status(401).json({ 
-        success: false,
-        error: err.message 
-      });
+      res.status(401).json({ success: false, error: err.message });
     }
   };
 
-  // ================= ROTAS DO PRÓPRIO CLIENTE (com authCliente) =================
+  logout = async (req, res) => {
+    try {
+      res.json({ success: true, message: 'Logout realizado com sucesso' });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  };
 
-  // Próprio perfil (cliente logado) - ✅ ATUALIZADO para usar req.cliente
+  // ================= ROTAS DO PRÓPRIO CLIENTE =================
   getPerfil = async (req, res) => {
     try {
-      // req.cliente vem do middleware authenticateCliente
       const cliente = await this.service.getClienteById(req.cliente.id);
       res.json(cliente);
     } catch (err) {
@@ -103,11 +81,9 @@ class ClienteController {
     }
   };
 
-  // Atualizar próprio perfil (cliente logado) - ✅ ATUALIZADO para usar req.cliente
   updatePerfil = async (req, res) => {
     try {
       const data = req.body;
-      // req.cliente vem do middleware authenticateCliente
       const cliente = await this.service.updateCliente(req.cliente.id, data);
       res.json(cliente);
     } catch (err) {
@@ -115,22 +91,40 @@ class ClienteController {
     }
   };
 
-  // Logout (opcional)
-  logout = async (req, res) => {
+  deleteOwnAccount = async (req, res) => {
     try {
-      // Como é JWT, o logout é feito no cliente
+      // 🔥 CORRIGIDO: Passando false porque NÃO é admin
+      await this.service.deleteCliente(req.cliente.id, false);
+      
       res.json({ 
         success: true,
-        message: 'Logout realizado com sucesso' 
+        message: 'Conta encerrada com sucesso' 
       });
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
   };
 
-  // ================= ROTAS DE ADMIN/SUPERADMIN (com auth.js) =================
+  getOwnEstatisticas = async (req, res) => {
+    try {
+      const estatisticas = await this.service.getEstatisticasCliente(req.cliente.id);
+      res.json(estatisticas);
+    } catch (err) {
+      res.status(404).json({ error: err.message });
+    }
+  };
 
-  // Listar todos (admin/superadmin)
+  // 🔥 NOVO: Buscar resgates do próprio cliente
+  getOwnResgates = async (req, res) => {
+    try {
+      const resgates = await this.service.getResgatesCliente(req.cliente.id);
+      res.json(resgates);
+    } catch (err) {
+      res.status(404).json({ error: err.message });
+    }
+  };
+
+  // ================= ROTAS DE ADMIN/SUPERADMIN =================
   getAll = async (_req, res) => {
     try {
       const clientes = await this.service.getAllClientes();
@@ -140,7 +134,6 @@ class ClienteController {
     }
   };
 
-  // Buscar por ID (admin/superadmin)
   getById = async (req, res) => {
     try {
       const { id } = req.params;
@@ -151,7 +144,6 @@ class ClienteController {
     }
   };
 
-  // Buscar por email (admin/superadmin)
   getByEmail = async (req, res) => {
     try {
       const { email } = req.params;
@@ -162,7 +154,6 @@ class ClienteController {
     }
   };
 
-  // Buscar cliente com resgates (admin/superadmin)
   getWithResgates = async (req, res) => {
     try {
       const { id } = req.params;
@@ -173,7 +164,6 @@ class ClienteController {
     }
   };
 
-  // Estatísticas do cliente (admin/superadmin)
   getEstatisticas = async (req, res) => {
     try {
       const { id } = req.params;
@@ -184,12 +174,10 @@ class ClienteController {
     }
   };
 
-  // Atualizar cliente (admin/superadmin)
   update = async (req, res) => {
     try {
       const { id } = req.params;
       const data = req.body;
-
       const cliente = await this.service.updateCliente(id, data);
       res.json(cliente);
     } catch (err) {
@@ -197,36 +185,29 @@ class ClienteController {
     }
   };
 
-  // Deletar cliente (admin/superadmin)
   delete = async (req, res) => {
     try {
       const { id } = req.params;
-      await this.service.deleteCliente(id);
+      // 🔥 CORRIGIDO: Passando true porque é admin
+      await this.service.deleteCliente(id, true);
       res.status(204).send();
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
   };
 
-  /**
- * Buscar clientes que resgataram cupons de uma loja específica
- */
-getClientesByLoja = async (req, res) => {
-  try {
-    const { lojaId } = req.params;
-    
-    // Passa os dados do usuário para o service verificar
-    const clientes = await this.service.getClientesByLoja(lojaId, {
-      userId: req.user?.id,
-      userRole: req.user?.role
-    });
-    
-    res.json(clientes);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-};
-
+  getClientesByLoja = async (req, res) => {
+    try {
+      const { lojaId } = req.params;
+      const clientes = await this.service.getClientesByLoja(lojaId, {
+        userId: req.user?.id,
+        userRole: req.user?.role
+      });
+      res.json(clientes);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  };
 }
 
 module.exports = ClienteController;

@@ -7,96 +7,109 @@ class ClienteService {
     this.repository = new ClienteRepository();
   }
 
-  async createCliente(data) {
-    const { 
-      nome, 
-      email, 
-      senha,
-      whatsapp,
-      bairro,
-      cidade,
-      estado,
-      genero,
-      dataNascimento,
-      pais = 'Brasil',
-      instagram,
-      facebook,
-      tiktok,
-      receberOfertas = true,
-      comoConheceu,
-      observacoes
-    } = data;
+  // ================= CRIAÇÃO DE CLIENTE =================
+  // ClienteService.js - VERSÃO CORRETA
+async createCliente(data) {
+  console.log('📥 Service.createCliente - dados recebidos:', data);
+  
+  const { 
+    nome, 
+    email, 
+    senha,
+    whatsapp,
+    bairro,           // ← Opcional
+    cidade,           // ← Opcional  
+    estado,           // ← Opcional
+    genero,           // ← Opcional
+    dataNascimento,   // ← Opcional
+    pais = 'Brasil',  // ← Tem default
+    instagram,        // ← Opcional
+    facebook,         // ← Opcional
+    tiktok,           // ← Opcional
+    receberOfertas = true,  // ← Tem default
+    comoConheceu,     // ← Opcional
+    observacoes       // ← Opcional
+  } = data;
 
-    // Validações dos campos obrigatórios
-    if (!nome || !email || !senha) {
-      throw new Error('Nome, email e senha são obrigatórios');
-    }
-
-    // Validações dos novos campos obrigatórios
-    if (!whatsapp) {
-      throw new Error('WhatsApp é obrigatório');
-    }
-    if (!bairro) {
-      throw new Error('Bairro é obrigatório');
-    }
-    if (!cidade) {
-      throw new Error('Cidade é obrigatória');
-    }
-    if (!estado) {
-      throw new Error('Estado é obrigatório');
-    }
-    if (!genero) {
-      throw new Error('Gênero é obrigatório');
-    }
-    if (!dataNascimento) {
-      throw new Error('Data de nascimento é obrigatória');
-    }
-
-    if (senha.length < 6) {
-      throw new Error('A senha deve ter no mínimo 6 caracteres');
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      throw new Error('Email inválido');
-    }
-
-    // Verificar se email já existe
-    const existing = await this.repository.findByEmail(email);
-    if (existing) throw new Error('Email já cadastrado');
-
-    // Hash da senha
-    const hashedPassword = await bcrypt.hash(senha, 10);
-
-    // Criar cliente com TODOS os campos
-    const cliente = await this.repository.create({
-      nome,
-      email,
-      senha: hashedPassword,
-      whatsapp,
-      bairro,
-      cidade,
-      estado,
-      pais,
-      genero,
-      dataNascimento: new Date(dataNascimento),
-      instagram,
-      facebook,
-      tiktok,
-      receberOfertas,
-      comoConheceu,
-      observacoes,
-      ativo: true
-    });
-
-    // Remover senha do retorno
-    const { senha: _, ...clienteSemSenha } = cliente;
-    return clienteSemSenha;
+  // ✅ APENAS OS 4 CAMPOS REALMENTE OBRIGATÓRIOS!
+  if (!nome || !email || !senha || !whatsapp) {
+    throw new Error('Nome, email, senha e whatsapp são obrigatórios');
   }
 
+  // Validações de formato (mantém)
+  if (senha.length < 6) {
+    throw new Error('A senha deve ter no mínimo 6 caracteres');
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    throw new Error('Email inválido');
+  }
+
+  // Verificar se email já existe
+  const existing = await this.repository.findByEmail(email);
+  if (existing) throw new Error('Email já cadastrado');
+
+  // Idade só valida SE foi fornecida (é opcional)
+  if (dataNascimento) {
+    const idade = this.calcularIdade(new Date(dataNascimento));
+    if (idade < 18) {
+      throw new Error('Cliente deve ter pelo menos 18 anos');
+    }
+  }
+
+  // Hash da senha
+  const hashedPassword = await bcrypt.hash(senha, 10);
+
+  // Prepara objeto para criar - só inclui campos que existem
+  const clienteData = {
+    nome,
+    email,
+    senha: hashedPassword,
+    whatsapp,
+    pais,
+    receberOfertas,
+    ativo: true
+  };
+
+  // Adiciona campos opcionais SOMENTE se foram fornecidos
+  if (bairro) clienteData.bairro = bairro;
+  if (cidade) clienteData.cidade = cidade;
+  if (estado) clienteData.estado = estado;
+  if (genero) clienteData.genero = genero;
+  if (instagram) clienteData.instagram = instagram;
+  if (facebook) clienteData.facebook = facebook;
+  if (tiktok) clienteData.tiktok = tiktok;
+  if (comoConheceu) clienteData.comoConheceu = comoConheceu;
+  if (observacoes) clienteData.observacoes = observacoes;
+  
+  // Data de nascimento precisa ser convertida
+  if (dataNascimento) {
+    clienteData.dataNascimento = new Date(dataNascimento);
+  }
+
+  console.log('💾 Salvando cliente com dados:', clienteData);
+
+  const cliente = await this.repository.create(clienteData);
+
+  const { senha: _, ...clienteSemSenha } = cliente;
+  return clienteSemSenha;
+}
+
+  // 🔥 Utilitário para calcular idade
+  calcularIdade(dataNascimento) {
+    const hoje = new Date();
+    let idade = hoje.getFullYear() - dataNascimento.getFullYear();
+    const mes = hoje.getMonth() - dataNascimento.getMonth();
+    if (mes < 0 || (mes === 0 && hoje.getDate() < dataNascimento.getDate())) {
+      idade--;
+    }
+    return idade;
+  }
+
+  // ================= LISTAGENS =================
   async getAllClientes() {
     const clientes = await this.repository.findAll();
-    // Remover senhas de todos
     return clientes.map(({ senha, ...rest }) => rest);
   }
 
@@ -116,6 +129,7 @@ class ClienteService {
     return clienteSemSenha;
   }
 
+  // ================= RESGATES E ESTATÍSTICAS =================
   async getClienteWithResgates(id) {
     const cliente = await this.repository.findWithResgates(id);
     if (!cliente) throw new Error('Cliente não encontrado');
@@ -124,18 +138,23 @@ class ClienteService {
     return clienteSemSenha;
   }
 
+  // 🔥 NOVO: Buscar apenas resgates do cliente
+  async getResgatesCliente(id) {
+    const cliente = await this.repository.findResgatesByCliente(id);
+    if (!cliente) throw new Error('Cliente não encontrado');
+    return cliente.resgates;
+  }
+
   async getEstatisticasCliente(id) {
     const cliente = await this.repository.findEstatisticas(id);
     if (!cliente) throw new Error('Cliente não encontrado');
 
     const { senha, ...clienteSemSenha } = cliente;
     
-    // Calcular estatísticas
     const totalResgates = cliente.resgates.length;
     const cuponsUnicos = new Set(cliente.resgates.map(r => r.cupomId)).size;
     const totalQuantidade = cliente.resgates.reduce((acc, r) => acc + r.quantidade, 0);
     
-    // Último resgate
     const ultimoResgate = cliente.resgates.length > 0 
       ? cliente.resgates.sort((a, b) => b.resgatadoEm - a.resgatadoEm)[0]
       : null;
@@ -154,102 +173,128 @@ class ClienteService {
     };
   }
 
+  // ================= ATUALIZAÇÃO =================
   async updateCliente(id, data) {
-    // Verificar se cliente existe
-    const cliente = await this.repository.findById(id);
-    if (!cliente) throw new Error('Cliente não encontrado');
+  console.log('🔍 Service updateCliente:', { id, data });
 
-    // Se estiver atualizando email, verificar se já existe
-    if (data.email && data.email !== cliente.email) {
+  const cliente = await this.repository.findById(id);
+  if (!cliente) throw new Error('Cliente não encontrado');
+
+  // 🔥 CORREÇÃO: Processar dataNascimento se existir
+  if (data.dataNascimento) {
+    try {
+      // Converter string para Date e depois para ISO
+      const dataObj = new Date(data.dataNascimento);
+      
+      // Verificar se é uma data válida
+      if (isNaN(dataObj.getTime())) {
+        throw new Error('Data de nascimento inválida');
+      }
+      
+      // Converter para ISO string
+      data.dataNascimento = dataObj.toISOString();
+      
+      console.log('📅 Data convertida:', data.dataNascimento);
+    } catch (error) {
+      throw new Error('Formato de data inválido. Use o formato DD/MM/YYYY ou YYYY-MM-DD');
+    }
+  }
+
+  // Validações
+  if (data.email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(data.email)) {
+      throw new Error('Email inválido');
+    }
+    
+    if (data.email !== cliente.email) {
       const existing = await this.repository.findByEmail(data.email);
       if (existing) throw new Error('Email já cadastrado');
     }
-
-    // Hash da nova senha se fornecida
-    if (data.senha) {
-      if (data.senha.length < 6) {
-        throw new Error('A senha deve ter no mínimo 6 caracteres');
-      }
-      data.senha = await bcrypt.hash(data.senha, 10);
-    }
-
-    // Atualizar
-    const clienteAtualizado = await this.repository.update(id, data);
-    
-    // Remover senha do retorno
-    const { senha, ...clienteSemSenha } = clienteAtualizado;
-    return clienteSemSenha;
   }
 
-  async deleteCliente(id) {
-    // Verificar se cliente existe
+  if (data.senha) {
+    if (data.senha.length < 6) {
+      throw new Error('A senha deve ter no mínimo 6 caracteres');
+    }
+    data.senha = await bcrypt.hash(data.senha, 10);
+  }
+
+  // Remover campos undefined
+  Object.keys(data).forEach(key => {
+    if (data[key] === undefined || data[key] === null) {
+      delete data[key];
+    }
+  });
+
+  console.log('📦 Dados processados para update:', data);
+
+  const clienteAtualizado = await this.repository.update(id, data);
+  
+  const { senha, ...clienteSemSenha } = clienteAtualizado;
+  return clienteSemSenha;
+}
+
+  // ================= EXCLUSÃO =================
+  async deleteCliente(id, isAdmin = false) {
     const cliente = await this.repository.findById(id);
     if (!cliente) throw new Error('Cliente não encontrado');
     
-    // Verificar se tem resgates (opcional - regra de negócio)
     const clienteWithResgates = await this.repository.findWithResgates(id);
-    if (clienteWithResgates && clienteWithResgates.resgates.length > 0) {
-      throw new Error('Não é possível deletar cliente com histórico de resgates');
+    
+    // 🔥 CORRIGIDO: Usando o parâmetro isAdmin corretamente
+    if (!isAdmin && clienteWithResgates?.resgates?.length > 0) {
+      throw new Error('Não é possível excluir conta com histórico de resgates');
     }
-
+    
     await this.repository.delete(id);
     return true;
   }
 
-  // ClienteService.js
-async autenticar(email, senha) {
-  if (!email || !senha) {
-    throw new Error('Email e senha são obrigatórios');
-  }
-
-  const cliente = await this.repository.findByEmail(email);
-  if (!cliente) throw new Error('Cliente não encontrado');
-
-  const senhaValida = await bcrypt.compare(senha, cliente.senha);
-  if (!senhaValida) throw new Error('Senha incorreta');
-
-  // Gerar token JWT
-  const token = jwt.sign(
-    { 
-      id: cliente.id, 
-      email: cliente.email,
-      tipo: 'cliente'
-    },
-    process.env.JWT_SECRET_CLIENTE,
-    { expiresIn: '30d' }
-  );
-
-  // Remover senha do objeto cliente
-  const { senha: _, ...clienteSemSenha } = cliente;
-
-  // ✅ RETORNA UM OBJETO COMPLETO
-  return {
-    cliente: clienteSemSenha,
-    token,
-    expiresIn: '30d'
-  };
-}
-
-/**
- * Buscar clientes que resgataram cupons de uma loja
- */
-async getClientesByLoja(lojaId, usuario) {
-  // Verificação de permissão no service
-  if (usuario.userRole === 'loja') {
-    // Use o repository para buscar o usuário
-    const lojaDoUsuario = await this.repository.findUsuarioWithLoja(usuario.userId);
-    
-    if (lojaDoUsuario?.loja?.id !== lojaId) {
-      throw new Error('Você só pode acessar clientes da sua própria loja');
+  // ================= AUTENTICAÇÃO =================
+  async autenticar(email, senha) {
+    if (!email || !senha) {
+      throw new Error('Email e senha são obrigatórios');
     }
-  }
-  
-  // Buscar clientes que resgataram cupons desta loja
-  const clientes = await this.repository.findClientesByLoja(lojaId);
-  
-  return clientes;
-}
 
+    const cliente = await this.repository.findByEmail(email);
+    if (!cliente) throw new Error('Cliente não encontrado');
+
+    const senhaValida = await bcrypt.compare(senha, cliente.senha);
+    if (!senhaValida) throw new Error('Senha incorreta');
+
+    const token = jwt.sign(
+      { 
+        id: cliente.id, 
+        email: cliente.email,
+        tipo: 'cliente'
+      },
+      process.env.JWT_SECRET_CLIENTE,
+      { expiresIn: '30d' }
+    );
+
+    const { senha: _, ...clienteSemSenha } = cliente;
+
+    return {
+      cliente: clienteSemSenha,
+      token,
+      expiresIn: '30d'
+    };
+  }
+
+  // ================= CLIENTES POR LOJA =================
+  async getClientesByLoja(lojaId, usuario) {
+    if (usuario.userRole === 'loja') {
+      const lojaDoUsuario = await this.repository.findUsuarioWithLoja(usuario.userId);
+      
+      if (lojaDoUsuario?.loja?.id !== lojaId) {
+        throw new Error('Você só pode acessar clientes da sua própria loja');
+      }
+    }
+    
+    const clientes = await this.repository.findClientesByLoja(lojaId);
+    return clientes;
+  }
 }
 
 module.exports = ClienteService;

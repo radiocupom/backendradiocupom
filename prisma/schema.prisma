@@ -61,16 +61,16 @@ model Cliente {
   email          String    @unique
   senha          String
   whatsapp       String   
-  bairro         String
-  cidade         String
-  estado         String
+  bairro         String?
+  cidade         String?
+  estado         String?
   pais           String   @default("Brasil")
-  genero         String
-  dataNascimento DateTime @map("data_nascimento")
+  genero         String?
+  dataNascimento DateTime? @map("data_nascimento")
   instagram      String?
   facebook       String?
   tiktok         String?
-  receberOfertas Boolean   @default(true) @map("receber_ofertas")
+  receberOfertas Boolean?   @default(true) @map("receber_ofertas")
   comoConheceu   String?   @map("como_conheceu")
   ativo          Boolean   @default(true)
   observacoes    String?   @db.Text

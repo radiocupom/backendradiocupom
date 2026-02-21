@@ -1,8 +1,6 @@
 const prisma = require("../../database/prismaClient.cjs");
 
 class ClienteRepository {
-  // ... seus métodos existentes ...
-
   create(data) {
     return prisma.cliente.create({ data });
   }
@@ -47,6 +45,27 @@ class ClienteRepository {
     });
   }
 
+  // 🔥 NOVO: Buscar apenas resgates do cliente (mais leve)
+  findResgatesByCliente(id) {
+    return prisma.cliente.findUnique({
+      where: { id },
+      include: {
+        resgates: {
+          include: {
+            cupom: {
+              include: {
+                loja: {
+                  select: { nome: true, logo: true }
+                }
+              }
+            }
+          },
+          orderBy: { resgatadoEm: 'desc' }
+        }
+      }
+    });
+  }
+
   findEstatisticas(id) {
     return prisma.cliente.findUnique({
       where: { id },
@@ -63,8 +82,6 @@ class ClienteRepository {
     });
   }
 
-  // 🔥 NOVOS MÉTODOS:
-
   async findUsuarioWithLoja(userId) {
     return prisma.usuario.findUnique({
       where: { id: userId },
@@ -77,22 +94,14 @@ class ClienteRepository {
       where: {
         resgates: {
           some: {
-            cupom: {
-              lojaId: lojaId
-            }
+            cupom: { lojaId: lojaId }
           }
         }
       },
       include: {
         resgates: {
-          where: {
-            cupom: {
-              lojaId: lojaId
-            }
-          },
-          include: {
-            cupom: true
-          }
+          where: { cupom: { lojaId: lojaId } },
+          include: { cupom: true }
         }
       }
     });

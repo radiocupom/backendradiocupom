@@ -1,9 +1,14 @@
-// server.js
 const app = require("./app");
- 
+const http = require('http');
+const setupWebSocketServer = require('./src/websocket/websocketServer');
 
 const PORT = process.env.PORT || 3001;
+const server = http.createServer(app);
 
-app.listen(PORT, () => {
+// Configurar WebSocket
+setupWebSocketServer(server);
+
+server.listen(PORT, () => {
   console.log(`Servidor rodando em http://localhost:${PORT}`);
+  console.log(`WebSocket rodando em ws://localhost:${PORT}/ws/logs`);
 });

@@ -6,13 +6,20 @@ const { authorizeRoles } = require('../../middlewares/role');
 const frontLojaController = require('./FrontLojaController');
 const frontCupomController = require('./FrontCupomController');
 const frontResgateController = require('./FrontResgateController');
+const frontProgramacaoController = require('./FrontProgramacaoController');
 
 const router = express.Router();
 
 // ================= ROTAS PÚBLICAS =================
+// Lojas
 router.get('/lojas', frontLojaController.listarLojas);
+router.get('/lojas/todas', frontLojaController.listarTodasLojas);
 router.get('/lojas/:id', frontLojaController.getLojaById);
+router.get('/programacao', frontProgramacaoController.getProgramacao);
+
+// Cupons
 router.get('/cupons', frontCupomController.listarCupons);
+router.get('/cupons/loja/:lojaId', frontCupomController.listarCuponsPorLoja); // ← NOVA!
 router.get('/cupons/:id', frontCupomController.getCupomById);
 
 // ================= ROTAS PROTEGIDAS (CLIENTE) =================
@@ -22,30 +29,18 @@ router.get('/verificar-resgate/:cupomId', authenticateCliente, frontResgateContr
 router.get('/qrcode/:id', authenticateCliente, frontResgateController.getQRCode);
 
 // ================= ROTAS PROTEGIDAS (LOJA) =================
-// Rota para a loja validar QR code do cliente
 router.post('/validar-qrcode', 
   authenticateToken, 
-  authorizeRoles('loja'), // ← Apenas lojistas podem validar
+  authorizeRoles('loja'),
   frontResgateController.validarQrCodeLoja
 );
 
- 
-
-// 🔥 NOVA ROTA: Listar resgates da loja
 router.get('/resgates/loja', 
   authenticateToken, 
   authorizeRoles('loja'),
   frontResgateController.listarResgatesLoja
 );
 
-// ================= ROTAS PROTEGIDAS (LOJA) =================
-router.get('/resgates/loja', 
-  authenticateToken, 
-  authorizeRoles('loja'),
-  frontResgateController.listarResgatesLoja
-);
-
-// 🔥 NOVA ROTA: Listar QR codes da loja
 router.get('/qrcodes/loja', 
   authenticateToken, 
   authorizeRoles('loja'),
