@@ -10,7 +10,7 @@ class DashboardController {
       const data = await this.service.getKPIs();
       return res.json(data);
     } catch (error) {
-      console.error(error);
+      console.error('❌ Erro ao buscar KPIs:', error);
       return res.status(500).json({ error: 'Erro ao buscar KPIs' });
     }
   };
@@ -20,6 +20,7 @@ class DashboardController {
       const data = await this.service.getRecentTransactions();
       return res.json(data);
     } catch (error) {
+      console.error('❌ Erro ao buscar transações:', error);
       return res.status(500).json({ error: 'Erro ao buscar transações' });
     }
   };
@@ -29,6 +30,7 @@ class DashboardController {
       const data = await this.service.getStoreDistribution();
       return res.json(data);
     } catch (error) {
+      console.error('❌ Erro na distribuição:', error);
       return res.status(500).json({ error: 'Erro na distribuição' });
     }
   };
@@ -38,6 +40,7 @@ class DashboardController {
       const data = await this.service.getStoreRanking();
       return res.json(data);
     } catch (error) {
+      console.error('❌ Erro no ranking:', error);
       return res.status(500).json({ error: 'Erro no ranking' });
     }
   };
@@ -47,6 +50,7 @@ class DashboardController {
       const data = await this.service.getGrowthMetrics();
       return res.json(data);
     } catch (error) {
+      console.error('❌ Erro nas métricas:', error);
       return res.status(500).json({ error: 'Erro nas métricas' });
     }
   };

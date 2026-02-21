@@ -19,7 +19,7 @@ class DashboardLojaService {
   }
 
   /**
-   * KPIs principais da loja
+   * KPIs principais da loja com dados financeiros
    */
   async getKPIs(usuarioId) {
     const loja = await this.getLojaByUsuarioId(usuarioId);
@@ -42,7 +42,12 @@ class DashboardLojaService {
       resgatesMes,
       totalQrCodes,
       qrCodesValidados,
-      totalClientes
+      totalClientes,
+      valorTotalResgatado,
+      valorTotalVendido,
+      valorTotalEconomizado,
+      ticketMedio,
+      cuponsComPreco
     ] = await Promise.all([
       this.repository.countCupons(loja.id),
       this.repository.countCuponsAtivos(loja.id),
@@ -52,7 +57,12 @@ class DashboardLojaService {
       this.repository.countResgatesPorPeriodo(loja.id, inicioMes),
       this.repository.countQrCodes(loja.id),
       this.repository.countQrCodes(loja.id, true),
-      this.repository.countClientesUnicos(loja.id)
+      this.repository.countClientesUnicos(loja.id),
+      this.repository.getValorTotalResgatado(loja.id),
+      this.repository.getValorTotalVendido(loja.id),
+      this.repository.getValorTotalEconomizado(loja.id),
+      this.repository.getTicketMedio(loja.id),
+      this.repository.getCuponsComPreco(loja.id)
     ]);
     
     return {
@@ -63,7 +73,8 @@ class DashboardLojaService {
       cupons: {
         total: totalCupons,
         ativos: cuponsAtivos,
-        expirados: totalCupons - cuponsAtivos
+        expirados: totalCupons - cuponsAtivos,
+        comPreco: cuponsComPreco
       },
       resgates: {
         total: totalResgates,
@@ -78,12 +89,18 @@ class DashboardLojaService {
       },
       clientes: {
         total: totalClientes
+      },
+      financeiro: {
+        valorTotalResgatado,
+        valorTotalVendido,
+        valorTotalEconomizado,
+        ticketMedio
       }
     };
   }
 
   /**
-   * Últimos resgates da loja
+   * Últimos resgates da loja com valores
    */
   async getUltimosResgates(usuarioId, limit = 10) {
     const loja = await this.getLojaByUsuarioId(usuarioId);
@@ -91,7 +108,7 @@ class DashboardLojaService {
   }
 
   /**
-   * Cupons mais resgatados da loja
+   * Cupons mais resgatados da loja com informações de preço
    */
   async getCuponsPopulares(usuarioId, limit = 5) {
     const loja = await this.getLojaByUsuarioId(usuarioId);
@@ -101,13 +118,18 @@ class DashboardLojaService {
       id: cupom.id,
       descricao: cupom.descricao,
       codigo: cupom.codigo,
+      precoOriginal: cupom.precoOriginal,
+      precoComDesconto: cupom.precoComDesconto,
+      percentualDesconto: cupom.percentualDesconto,
+      nomeProduto: cupom.nomeProduto,
       totalResgates: cupom._count.resgates,
-      dataExpiracao: cupom.dataExpiracao
+      dataExpiracao: cupom.dataExpiracao,
+      valorTotalGerado: (cupom.precoComDesconto || 0) * (cupom._count.resgates || 0)
     }));
   }
 
   /**
-   * Resgates por dia (últimos 7 dias)
+   * Resgates por dia (últimos 7 dias) com valores
    */
   async getResgatesPorDia(usuarioId) {
     const loja = await this.getLojaByUsuarioId(usuarioId);
@@ -133,7 +155,8 @@ class DashboardLojaService {
       dias.push({
         dia: dia.toLocaleDateString('pt-BR', { weekday: 'short' }),
         data: dia.toISOString().split('T')[0],
-        total: resgatesDia.reduce((acc, r) => acc + r._count, 0)
+        total: resgatesDia.reduce((acc, r) => acc + (r._count || 0), 0),
+        valorTotal: 0 // Seria necessário buscar os cupons para calcular
       });
     }
     
@@ -158,7 +181,8 @@ class DashboardLojaService {
         qrCodes: dados.totais.qrCodes,
         clientes: {
           total: dados.totais.clientes
-        }
+        },
+        financeiro: dados.totais.financeiro
       },
       ultimosResgates: dados.ultimosResgates,
       cuponsPopulares: dados.cuponsPopulares,

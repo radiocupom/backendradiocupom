@@ -20,8 +20,8 @@ model Usuario {
   email     String   @unique
   senha     String
   role      Role     @default(loja)
-  lojaId    String?  @unique @map("loja_id") @db.Uuid  // ← @unique é obrigatório para 1:1
-  loja      Loja?    @relation(fields: [lojaId], references: [id])  // ← Relação definida AQUI
+  lojaId    String?  @unique @map("loja_id") @db.Uuid
+  loja      Loja?    @relation(fields: [lojaId], references: [id])
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -46,7 +46,7 @@ model Loja {
   payment     Boolean  @default(false)
   categoria   CategoriaLoja
   descricao   String
-  usuario     Usuario? // ← APENAS o campo, SEM @relation!
+  usuario     Usuario?
   cupons      Cupom[]
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -75,7 +75,7 @@ model Cliente {
   ativo          Boolean   @default(true)
   observacoes    String?   @db.Text
   resgates       Resgate[]
-  qrCodesUsados  QrCodeUsado[] // ← RELAÇÃO INVERSA ADICIONADA!
+  qrCodesUsados  QrCodeUsado[]
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
   ultimoLogin    DateTime? @map("ultimo_login")
@@ -92,10 +92,17 @@ model Cupom {
   lojaId               String        @map("loja_id") @db.Uuid
   loja                 Loja          @relation(fields: [lojaId], references: [id])
   logo                 String
+  
+  // 🔥 NOVOS CAMPOS DE PREÇO
+  precoOriginal        Float?        @map("preco_original")     // Preço original do produto/serviço
+  precoComDesconto     Float?        @map("preco_com_desconto") // Preço após aplicar o desconto
+  percentualDesconto   Int?          @map("percentual_desconto") // Percentual de desconto (opcional)
+  nomeProduto          String?       @map("nome_produto")       // Nome do produto específico (opcional)
+  
   totalQrCodes         Int           @default(1000) @map("total_qr_codes")
   qrCodesUsados        Int           @default(0) @map("qr_codes_usados")
   resgates             Resgate[]
-  qrCodesUsadosList    QrCodeUsado[] // ← RELAÇÃO INVERSA ADICIONADA!
+  qrCodesUsadosList    QrCodeUsado[]
   createdAt            DateTime      @default(now()) @map("created_at")
   updatedAt            DateTime      @updatedAt @map("updated_at")
 
@@ -106,7 +113,7 @@ model QrCodeUsado {
   id          String    @id @default(uuid()) @db.Uuid
   cupomId     String    @map("cupom_id") @db.Uuid
   cupom       Cupom     @relation(fields: [cupomId], references: [id], onDelete: Cascade)
-  codigo      String    @unique(map: "qrcodes_usados_codigo_unique")  // ← Nome único para a constraint
+  codigo      String    @unique(map: "qrcodes_usados_codigo_unique")
   clienteId   String    @map("cliente_id") @db.Uuid
   cliente     Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   usadoEm     DateTime  @default(now()) @map("usado_em")
@@ -115,7 +122,6 @@ model QrCodeUsado {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  // 🔥 ÍNDICES OTIMIZADOS (SEM O @@unique DUPLICADO)
   @@index([cupomId], map: "qrcodes_usados_cupom_id_idx")
   @@index([clienteId], map: "qrcodes_usados_cliente_id_idx")
   @@index([usadoEm], map: "qrcodes_usados_usado_em_idx")
@@ -130,7 +136,6 @@ model QrCodeUsado {
   @@map("qrcodes_usados")
 }
 
- 
 model Resgate {
   id          String   @id @default(uuid()) @db.Uuid
   clienteId   String   @map("cliente_id") @db.Uuid

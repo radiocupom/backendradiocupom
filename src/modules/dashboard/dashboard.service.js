@@ -13,7 +13,12 @@ class DashboardService {
       cuponsAtivos,
       cuponsExpirados,
       resgatesHoje,
-      resgatesMes
+      resgatesMes,
+      valorTotalResgatado,
+      valorTotalVendido,
+      valorTotalEconomizado,
+      ticketMedio,
+      cuponsComPreco
     ] = await Promise.all([
       this.repository.countLojas(),
       this.repository.countLojasAtivas(),
@@ -21,17 +26,30 @@ class DashboardService {
       this.repository.countCuponsAtivos(),
       this.repository.countCuponsExpirados(),
       this.repository.countResgatesHoje(),
-      this.repository.countResgatesMes()
+      this.repository.countResgatesMes(),
+      this.repository.getValorTotalResgatado(),
+      this.repository.getValorTotalVendido(),
+      this.repository.getValorTotalEconomizado(),
+      this.repository.getTicketMedio(),
+      this.repository.getCuponsComPreco()
     ]);
 
     return {
+      // Métricas básicas
       totalLojas,
       lojasAtivas,
       totalUsuarios,
       cuponsAtivos,
       cuponsExpirados,
       resgatesHoje,
-      resgatesMes
+      resgatesMes,
+      
+      // 🔥 NOVAS MÉTRICAS FINANCEIRAS
+      valorTotalResgatado,
+      valorTotalVendido,
+      valorTotalEconomizado,
+      ticketMedio,
+      cuponsComPreco
     };
   }
 

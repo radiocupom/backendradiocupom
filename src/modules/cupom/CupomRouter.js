@@ -1,4 +1,3 @@
-// src/modules/cupom/CupomRouter.js
 const express = require('express');
 const CupomController = require('./CupomController');
 const { authenticateToken } = require('../../middlewares/auth');
@@ -56,10 +55,11 @@ router.get('/:id',
   controller.getById
 );
 
+// Atualizar cupom
 router.put('/:id',
   authenticateToken,
   authorizeRoles('superadmin', 'admin', 'loja'),
-  upload.single('logo'),  // ← ISSO ESTAVA FALTANDO!
+  upload.single('logo'),
   controller.update
 );
 

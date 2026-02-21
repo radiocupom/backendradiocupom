@@ -15,18 +15,13 @@ class DashboardLojaRepository {
     });
   }
 
-  /**
-   * Conta total de cupons da loja
-   */
+  // ================= CUPONS =================
   async countCupons(lojaId) {
     return prisma.cupom.count({
       where: { lojaId }
     });
   }
 
-  /**
-   * Conta cupons ativos (não expirados)
-   */
   async countCuponsAtivos(lojaId) {
     return prisma.cupom.count({
       where: {
@@ -36,9 +31,7 @@ class DashboardLojaRepository {
     });
   }
 
-  /**
-   * Conta total de resgates da loja
-   */
+  // ================= RESGATES =================
   async countResgates(lojaId, filtros = {}) {
     return prisma.resgate.count({
       where: {
@@ -48,9 +41,6 @@ class DashboardLojaRepository {
     });
   }
 
-  /**
-   * Conta resgates por período
-   */
   async countResgatesPorPeriodo(lojaId, dataInicio, dataFim = new Date()) {
     return prisma.resgate.count({
       where: {
@@ -63,9 +53,7 @@ class DashboardLojaRepository {
     });
   }
 
-  /**
-   * Conta total de QR Codes da loja - CORRIGIDO: QrCodeUsado
-   */
+  // ================= QR CODES =================
   async countQrCodes(lojaId, validado = null) {
     const where = {
       cupom: { lojaId }
@@ -78,9 +66,7 @@ class DashboardLojaRepository {
     return prisma.qrCodeUsado.count({ where });
   }
 
-  /**
-   * Conta clientes únicos da loja
-   */
+  // ================= CLIENTES =================
   async countClientesUnicos(lojaId) {
     const clientes = await prisma.resgate.groupBy({
       by: ['clienteId'],
@@ -92,9 +78,104 @@ class DashboardLojaRepository {
     return clientes.length;
   }
 
-  /**
-   * Busca últimos resgates com detalhes
-   */
+  // ================= DADOS FINANCEIROS =================
+  async getValorTotalResgatado(lojaId) {
+    const cupons = await prisma.cupom.findMany({
+      where: { 
+        lojaId,
+        precoOriginal: { not: null }
+      }
+    });
+
+    return cupons.reduce((total, cupom) => total + (cupom.precoOriginal || 0), 0);
+  }
+
+  async getValorTotalVendido(lojaId) {
+    const qrCodesValidados = await prisma.qrCodeUsado.findMany({
+      where: { 
+        validado: true,
+        cupom: { lojaId }
+      },
+      include: { cupom: true }
+    });
+
+    return qrCodesValidados.reduce((total, qr) => {
+      return total + (qr.cupom.precoComDesconto || qr.cupom.precoOriginal || 0);
+    }, 0);
+  }
+
+  async getValorTotalEconomizado(lojaId) {
+    const [valorTotal, valorVendido] = await Promise.all([
+      this.getValorTotalResgatado(lojaId),
+      this.getValorTotalVendido(lojaId)
+    ]);
+    return valorTotal - valorVendido;
+  }
+
+  async getTicketMedio(lojaId) {
+    const resgatesValidados = await prisma.qrCodeUsado.count({
+      where: { 
+        validado: true,
+        cupom: { lojaId }
+      }
+    });
+
+    if (resgatesValidados === 0) return 0;
+
+    const valorVendido = await this.getValorTotalVendido(lojaId);
+    return valorVendido / resgatesValidados;
+  }
+
+  async getCuponsComPreco(lojaId) {
+    return prisma.cupom.count({
+      where: { 
+        lojaId,
+        precoOriginal: { not: null }
+      }
+    });
+  }
+
+  async getResgatesComValores(lojaId, limit = 10) {
+    const resgates = await prisma.resgate.findMany({
+      where: {
+        cupom: { lojaId }
+      },
+      include: {
+        cliente: {
+          select: {
+            id: true,
+            nome: true,
+            email: true,
+            whatsapp: true
+          }
+        },
+        cupom: {
+          select: {
+            id: true,
+            descricao: true,
+            codigo: true,
+            precoOriginal: true,
+            precoComDesconto: true,
+            percentualDesconto: true,
+            nomeProduto: true
+          }
+        }
+      },
+      orderBy: {
+        resgatadoEm: 'desc'
+      },
+      take: limit
+    });
+
+    return resgates.map(resgate => ({
+      ...resgate,
+      valorOriginal: resgate.cupom.precoOriginal || 0,
+      valorPago: resgate.cupom.precoComDesconto || 0,
+      economia: (resgate.cupom.precoOriginal || 0) - (resgate.cupom.precoComDesconto || 0)
+    }));
+  }
+
+  // ================= ÚLTIMOS RESGATES =================
   async findUltimosResgates(lojaId, limit = 10) {
     return prisma.resgate.findMany({
       where: {
@@ -113,7 +194,11 @@ class DashboardLojaRepository {
           select: {
             id: true,
             descricao: true,
-            codigo: true
+            codigo: true,
+            precoOriginal: true,
+            precoComDesconto: true,
+            percentualDesconto: true,
+            nomeProduto: true
           }
         }
       },
@@ -124,9 +209,7 @@ class DashboardLojaRepository {
     });
   }
 
-  /**
-   * Busca cupons mais resgatados
-   */
+  // ================= CUPONS POPULARES =================
   async findCuponsMaisResgatados(lojaId, limit = 5) {
     return prisma.cupom.findMany({
       where: { lojaId },
@@ -144,9 +227,7 @@ class DashboardLojaRepository {
     });
   }
 
-  /**
-   * Busca resgates agrupados por dia
-   */
+  // ================= RESGATES POR DIA =================
   async findResgatesPorDia(lojaId, dataInicio, dataFim) {
     const resgates = await prisma.resgate.groupBy({
       by: ['resgatadoEm'],
@@ -158,6 +239,9 @@ class DashboardLojaRepository {
         }
       },
       _count: true,
+      _sum: {
+        quantidade: true
+      },
       orderBy: {
         resgatadoEm: 'asc'
       }
@@ -166,9 +250,7 @@ class DashboardLojaRepository {
     return resgates;
   }
 
-  /**
-   * Busca dados completos em paralelo (para performance)
-   */
+  // ================= DADOS COMPLETOS =================
   async findDadosCompletos(lojaId) {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
@@ -193,6 +275,11 @@ class DashboardLojaRepository {
       totalQrCodes,
       qrCodesValidados,
       totalClientes,
+      valorTotalResgatado,
+      valorTotalVendido,
+      valorTotalEconomizado,
+      ticketMedio,
+      cuponsComPreco,
       ultimosResgates,
       cuponsPopulares,
       resgatesPorDia
@@ -206,6 +293,11 @@ class DashboardLojaRepository {
       this.countQrCodes(lojaId),
       this.countQrCodes(lojaId, true),
       this.countClientesUnicos(lojaId),
+      this.getValorTotalResgatado(lojaId),
+      this.getValorTotalVendido(lojaId),
+      this.getValorTotalEconomizado(lojaId),
+      this.getTicketMedio(lojaId),
+      this.getCuponsComPreco(lojaId),
       this.findUltimosResgates(lojaId, 5),
       this.findCuponsMaisResgatados(lojaId, 5),
       this.findResgatesPorDia(lojaId, dataInicioGrafico, new Date())
@@ -216,7 +308,8 @@ class DashboardLojaRepository {
         cupons: {
           total: totalCupons,
           ativos: cuponsAtivos,
-          expirados: totalCupons - cuponsAtivos
+          expirados: totalCupons - cuponsAtivos,
+          comPreco: cuponsComPreco
         },
         resgates: {
           total: totalResgates,
@@ -229,13 +322,23 @@ class DashboardLojaRepository {
           validados: qrCodesValidados,
           pendentes: totalQrCodes - qrCodesValidados
         },
-        clientes: totalClientes
+        clientes: totalClientes,
+        financeiro: {
+          valorTotalResgatado,
+          valorTotalVendido,
+          valorTotalEconomizado,
+          ticketMedio
+        }
       },
       ultimosResgates,
       cuponsPopulares: cuponsPopulares.map(c => ({
         id: c.id,
         descricao: c.descricao,
         codigo: c.codigo,
+        precoOriginal: c.precoOriginal,
+        precoComDesconto: c.precoComDesconto,
+        percentualDesconto: c.percentualDesconto,
+        nomeProduto: c.nomeProduto,
         totalResgates: c._count.resgates,
         dataExpiracao: c.dataExpiracao
       })),

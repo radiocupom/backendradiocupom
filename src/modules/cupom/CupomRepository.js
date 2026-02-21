@@ -1,4 +1,3 @@
-// src/modules/cupom/CupomRepository.js
 const prisma = require("../../database/prismaClient.cjs");
 
 class CupomRepository {
@@ -7,23 +6,23 @@ class CupomRepository {
   }
 
   findAll() {
-  return prisma.cupom.findMany({
-    include: {
-      loja: {
-        select: {
-          id: true,
-          nome: true,
-          logo: true,
-          payment: true
+    return prisma.cupom.findMany({
+      include: {
+        loja: {
+          select: {
+            id: true,
+            nome: true,
+            logo: true,
+            payment: true
+          }
+        },
+        _count: {
+          select: { resgates: true }
         }
       },
-      _count: {
-        select: { resgates: true }  // ← ADICIONAR ISSO!
-      }
-    },
-    orderBy: { createdAt: 'desc' }
-  });
-}
+      orderBy: { createdAt: 'desc' }
+    });
+  }
 
   findById(id) {
     return prisma.cupom.findUnique({
@@ -37,14 +36,6 @@ class CupomRepository {
             payment: true
           }
         },
-        qrCodes: {
-          select: {
-            id: true,
-            codigo: true,
-            usado: true,
-            criadoEm: true
-          }
-        },
         _count: {
           select: { resgates: true }
         }
@@ -56,11 +47,8 @@ class CupomRepository {
     return prisma.cupom.findMany({
       where: { lojaId },
       include: {
-        qrCodes: {
-          select: {
-            id: true,
-            usado: true
-          }
+        _count: {
+          select: { resgates: true }
         }
       },
       orderBy: { createdAt: 'desc' }

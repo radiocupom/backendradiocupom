@@ -1,4 +1,3 @@
-// src/modules/cupom/CupomController.js
 const CupomService = require('./CupomService');
 
 class CupomController {
@@ -14,7 +13,12 @@ class CupomController {
         quantidadePorCliente, 
         dataExpiracao, 
         lojaId,
-        quantidadeQrCodes 
+        quantidadeQrCodes,
+        // 🔥 NOVOS CAMPOS
+        precoOriginal,
+        precoComDesconto,
+        percentualDesconto,
+        nomeProduto
       } = req.body;
 
       const logo = req.file ? req.file.path : '';
@@ -32,7 +36,12 @@ class CupomController {
         dataExpiracao,
         lojaId,
         logo,
-        quantidadeQrCodes: quantidadeQrCodes ? parseInt(quantidadeQrCodes) : 1
+        quantidadeQrCodes: quantidadeQrCodes ? parseInt(quantidadeQrCodes) : 1000,
+        // 🔥 NOVOS CAMPOS
+        precoOriginal: precoOriginal ? parseFloat(precoOriginal) : null,
+        precoComDesconto: precoComDesconto ? parseFloat(precoComDesconto) : null,
+        percentualDesconto: percentualDesconto ? parseInt(percentualDesconto) : null,
+        nomeProduto
       }, req.user);
 
       res.status(201).json(cupom);
@@ -83,7 +92,6 @@ class CupomController {
     }
   };
 
-  // ✅ NOVA ROTA: Cupons do lojista logado
   getMinhaLoja = async (req, res) => {
     try {
       const cupons = await this.service.getCuponsByLojista(req.user);
@@ -94,33 +102,38 @@ class CupomController {
   };
 
   update = async (req, res) => {
-  console.log('📥 [update] Requisição recebida - ID:', req.params.id);
-  console.log('📦 [update] Body recebido:', req.body);
-  console.log('📎 [update] File recebido:', req.file);
-  console.log('👤 [update] Usuário:', req.user?.id, req.user?.role);
-  
-  try {
-    const { id } = req.params;
-    const data = { ...req.body };
+    console.log('📥 [update] Requisição recebida - ID:', req.params.id);
+    console.log('📦 [update] Body recebido:', req.body);
+    console.log('📎 [update] File recebido:', req.file);
+    console.log('👤 [update] Usuário:', req.user?.id, req.user?.role);
     
-    // Se tiver arquivo, adicionar o caminho
-    if (req.file) {
-      data.logo = req.file.path;
-      console.log('🖼️ [update] Logo atualizada:', data.logo);
+    try {
+      const { id } = req.params;
+      const data = { ...req.body };
+      
+      if (req.file) {
+        data.logo = req.file.path;
+        console.log('🖼️ [update] Logo atualizada:', data.logo);
+      }
+
+      // 🔥 CONVERTER CAMPOS NUMÉRICOS
+      if (data.quantidadePorCliente) data.quantidadePorCliente = parseInt(data.quantidadePorCliente);
+      if (data.precoOriginal) data.precoOriginal = parseFloat(data.precoOriginal);
+      if (data.precoComDesconto) data.precoComDesconto = parseFloat(data.precoComDesconto);
+      if (data.percentualDesconto) data.percentualDesconto = parseInt(data.percentualDesconto);
+      
+      console.log('📝 [update] Dados processados:', data);
+      
+      const cupom = await this.service.updateCupom(id, data, req.user);
+      console.log('✅ [update] Cupom atualizado:', cupom.id);
+      
+      res.json(cupom);
+    } catch (err) {
+      console.error('❌ [update] Erro:', err.message);
+      console.error('❌ [update] Stack:', err.stack);
+      res.status(400).json({ error: err.message });
     }
-    
-    console.log('📝 [update] Dados processados:', data);
-    
-    const cupom = await this.service.updateCupom(id, data, req.user);
-    console.log('✅ [update] Cupom atualizado:', cupom.id);
-    
-    res.json(cupom);
-  } catch (err) {
-    console.error('❌ [update] Erro:', err.message);
-    console.error('❌ [update] Stack:', err.stack);
-    res.status(400).json({ error: err.message });
-  }
-};
+  };
 
   delete = async (req, res) => {
     try {

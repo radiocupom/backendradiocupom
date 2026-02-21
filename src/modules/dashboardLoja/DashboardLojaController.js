@@ -6,7 +6,7 @@ class DashboardLojaController {
   }
 
   /**
-   * KPIs principais da loja
+   * KPIs principais da loja com dados financeiros
    */
   getKPIs = async (req, res) => {
     try {

@@ -1,7 +1,7 @@
 const prisma = require("../../database/prismaClient.cjs");
 
 class DashboardRepository {
-
+  // ================= CONTAGENS BÁSICAS =================
   countLojas() {
     return prisma.loja.count();
   }
@@ -47,6 +47,54 @@ class DashboardRepository {
     });
   }
 
+  // ================= VALORES FINANCEIROS =================
+  async getValorTotalResgatado() {
+    const cupons = await prisma.cupom.findMany({
+      where: {
+        precoOriginal: { not: null }
+      }
+    });
+
+    return cupons.reduce((total, cupom) => total + (cupom.precoOriginal || 0), 0);
+  }
+
+  async getValorTotalVendido() {
+    const qrCodesValidados = await prisma.qrCodeUsado.findMany({
+      where: { validado: true },
+      include: { cupom: true }
+    });
+
+    return qrCodesValidados.reduce((total, qr) => {
+      return total + (qr.cupom.precoComDesconto || qr.cupom.precoOriginal || 0);
+    }, 0);
+  }
+
+  async getValorTotalEconomizado() {
+    const valorTotal = await this.getValorTotalResgatado();
+    const valorVendido = await this.getValorTotalVendido();
+    return valorTotal - valorVendido;
+  }
+
+  async getTicketMedio() {
+    const resgatesValidados = await prisma.qrCodeUsado.count({
+      where: { validado: true }
+    });
+
+    if (resgatesValidados === 0) return 0;
+
+    const valorVendido = await this.getValorTotalVendido();
+    return valorVendido / resgatesValidados;
+  }
+
+  async getCuponsComPreco() {
+    return prisma.cupom.count({
+      where: {
+        precoOriginal: { not: null }
+      }
+    });
+  }
+
+  // ================= RESGATES RECENTES =================
   async getRecentResgates() {
     return prisma.resgate.findMany({
       take: 10,
@@ -60,6 +108,7 @@ class DashboardRepository {
     });
   }
 
+  // ================= DISTRIBUIÇÃO =================
   async getStoreDistribution() {
     return prisma.loja.groupBy({
       by: ['categoria'],
@@ -67,50 +116,49 @@ class DashboardRepository {
     });
   }
 
+  // ================= RANKING =================
   async getStoreRanking() {
-  const ranking = await prisma.resgate.groupBy({
-    by: ['cupomId'],
-    _sum: {
-      quantidade: true
-    }
-  });
+    const ranking = await prisma.resgate.groupBy({
+      by: ['cupomId'],
+      _sum: { quantidade: true }
+    });
 
-  // Buscar os cupons com suas lojas
-  const cupomIds = ranking.map(r => r.cupomId);
+    const cupomIds = ranking.map(r => r.cupomId);
 
-  const cupons = await prisma.cupom.findMany({
-    where: { id: { in: cupomIds } },
-    include: { loja: true }
-  });
+    const cupons = await prisma.cupom.findMany({
+      where: { id: { in: cupomIds } },
+      include: { loja: true }
+    });
 
-  // Agrupar por loja
-  const lojaMap = {};
+    const lojaMap = {};
 
-  ranking.forEach(item => {
-    const cupom = cupons.find(c => c.id === item.cupomId);
-    if (!cupom) return;
+    ranking.forEach(item => {
+      const cupom = cupons.find(c => c.id === item.cupomId);
+      if (!cupom) return;
 
-    const lojaId = cupom.loja.id;
+      const lojaId = cupom.loja.id;
 
-    if (!lojaMap[lojaId]) {
-      lojaMap[lojaId] = {
-        lojaId,
-        lojaNome: cupom.loja.nome,
-        totalResgates: 0
-      };
-    }
+      if (!lojaMap[lojaId]) {
+        lojaMap[lojaId] = {
+          lojaId,
+          lojaNome: cupom.loja.nome,
+          totalResgates: 0,
+          valorTotal: 0
+        };
+      }
 
-    lojaMap[lojaId].totalResgates += item._sum.quantidade || 0;
-  });
+      lojaMap[lojaId].totalResgates += item._sum.quantidade || 0;
+      lojaMap[lojaId].valorTotal += (cupom.precoComDesconto || cupom.precoOriginal || 0) * (item._sum.quantidade || 0);
+    });
 
-  const result = Object.values(lojaMap)
-    .sort((a, b) => b.totalResgates - a.totalResgates)
-    .slice(0, 5);
+    const result = Object.values(lojaMap)
+      .sort((a, b) => b.totalResgates - a.totalResgates)
+      .slice(0, 5);
 
-  return result;
-}
+    return result;
+  }
 
-
+  // ================= MÉTRICAS DE CRESCIMENTO =================
   async getGrowthMetrics() {
     const totalLojas = await prisma.loja.count();
     const totalClientes = await prisma.cliente.count();
