@@ -49,43 +49,120 @@ class DashboardRepository {
 
   // ================= VALORES FINANCEIROS =================
   async getValorTotalResgatado() {
-    const cupons = await prisma.cupom.findMany({
-      where: {
+  // 🔥 SOMA TODOS OS RESGATES com preço original
+  const result = await prisma.resgate.aggregate({
+    _sum: {
+      quantidade: true
+    },
+    where: {
+      cupom: {
         precoOriginal: { not: null }
       }
-    });
+    }
+  });
 
-    return cupons.reduce((total, cupom) => total + (cupom.precoOriginal || 0), 0);
+  // Buscar todos os cupons com preço
+  const cupons = await prisma.cupom.findMany({
+    where: { precoOriginal: { not: null } },
+    select: { id: true, precoOriginal: true }
+  });
+
+  // Mapear preços por cupom
+  const precosPorCupom = {};
+  cupons.forEach(c => precosPorCupom[c.id] = c.precoOriginal);
+
+  // Buscar todos os resgates
+  const resgates = await prisma.resgate.findMany({
+    where: {
+      cupom: {
+        precoOriginal: { not: null }
+      }
+    },
+    select: {
+      cupomId: true,
+      quantidade: true
+    }
+  });
+
+  // Calcular total
+  let total = 0;
+  for (const resgate of resgates) {
+    total += (precosPorCupom[resgate.cupomId] || 0) * resgate.quantidade;
   }
+
+  return total;
+}
 
   async getValorTotalVendido() {
-    const qrCodesValidados = await prisma.qrCodeUsado.findMany({
-      where: { validado: true },
-      include: { cupom: true }
-    });
+  // 🔥 SOMA TODOS OS RESGATES (não apenas validados)
+  const result = await prisma.resgate.aggregate({
+    _sum: {
+      quantidade: true
+    },
+    where: {
+      cupom: {
+        precoComDesconto: { not: null }
+      }
+    }
+  });
 
-    return qrCodesValidados.reduce((total, qr) => {
-      return total + (qr.cupom.precoComDesconto || qr.cupom.precoOriginal || 0);
-    }, 0);
+  // Buscar todos os cupons com preço
+  const cupons = await prisma.cupom.findMany({
+    where: { precoComDesconto: { not: null } },
+    select: { id: true, precoComDesconto: true, precoOriginal: true }
+  });
+
+  // Mapear preços por cupom
+  const precosPorCupom = {};
+  cupons.forEach(c => precosPorCupom[c.id] = c.precoComDesconto || c.precoOriginal);
+
+  // Buscar todos os resgates
+  const resgates = await prisma.resgate.findMany({
+    where: {
+      cupom: {
+        precoComDesconto: { not: null }
+      }
+    },
+    select: {
+      cupomId: true,
+      quantidade: true
+    }
+  });
+
+  // Calcular total
+  let total = 0;
+  for (const resgate of resgates) {
+    total += (precosPorCupom[resgate.cupomId] || 0) * resgate.quantidade;
   }
+
+  return total;
+}
+
+async getValorTotalEconomizado() {
+  const totalBruto = await this.getValorTotalResgatado();
+  const totalVendido = await this.getValorTotalVendido();
+  return totalBruto - totalVendido;
+}
+
+async getTicketMedio() {
+  const totalVendido = await this.getValorTotalVendido();
+  const totalResgates = await prisma.resgate.count(); // Todos os resgates, não só validados
+  
+  return totalResgates > 0 ? totalVendido / totalResgates : 0;
+}
 
   async getValorTotalEconomizado() {
-    const valorTotal = await this.getValorTotalResgatado();
-    const valorVendido = await this.getValorTotalVendido();
-    return valorTotal - valorVendido;
-  }
+  const totalBruto = await this.getValorTotalResgatado();
+  const totalVendido = await this.getValorTotalVendido();
+  return totalBruto - totalVendido;
+}
 
-  async getTicketMedio() {
-    const resgatesValidados = await prisma.qrCodeUsado.count({
-      where: { validado: true }
-    });
-
-    if (resgatesValidados === 0) return 0;
-
-    const valorVendido = await this.getValorTotalVendido();
-    return valorVendido / resgatesValidados;
-  }
-
+async getTicketMedio() {
+  const totalVendido = await this.getValorTotalVendido();
+  const totalResgates = await prisma.resgate.count(); // Todos os resgates, não só validados
+  
+  return totalResgates > 0 ? totalVendido / totalResgates : 0;
+}
   async getCuponsComPreco() {
     return prisma.cupom.count({
       where: {

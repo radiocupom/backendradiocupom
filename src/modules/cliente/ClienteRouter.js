@@ -1,3 +1,4 @@
+// routes/clienteRoutes.js
 const express = require('express');
 const ClienteController = require('./ClienteController');
 const { authenticateToken } = require('../../middlewares/auth');
@@ -16,7 +17,7 @@ router.get('/perfil', authenticateCliente, controller.getPerfil);
 router.put('/perfil', authenticateCliente, controller.updatePerfil);
 router.delete('/perfil', authenticateCliente, controller.deleteOwnAccount);
 router.get('/perfil/estatisticas', authenticateCliente, controller.getOwnEstatisticas);
-router.get('/perfil/resgates', authenticateCliente, controller.getOwnResgates); // 🔥 NOVA ROTA
+router.get('/perfil/resgates', authenticateCliente, controller.getOwnResgates);
 
 // ================= ROTAS DE ADMIN/SUPERADMIN =================
 router.get('/', authenticateToken, authorizeRoles('superadmin', 'admin'), controller.getAll);
@@ -29,5 +30,6 @@ router.delete('/:id', authenticateToken, authorizeRoles('superadmin', 'admin'), 
 
 // ================= ROTAS DE LOJA =================
 router.get('/loja/:lojaId/clientes', authenticateToken, authorizeRoles('loja', 'admin', 'superadmin'), controller.getClientesByLoja);
+router.get('/loja/:lojaId/cliente/:clienteId', authenticateToken, authorizeRoles('loja', 'admin', 'superadmin'), controller.getClienteByLoja);
 
 module.exports = router;

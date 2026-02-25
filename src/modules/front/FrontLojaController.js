@@ -8,7 +8,7 @@ class FrontLojaController {
     try {
       const lojas = await prisma.loja.findMany({
         where: {
-          payment: true // Apenas lojas com pagamento ativo
+          payment: true
         },
         select: {
           id: true,
@@ -16,9 +16,7 @@ class FrontLojaController {
           logo: true,
           email: true,
           categoria: true,
-          descricao: true, // ← ADICIONA DESCRIÇÃO DA LOJA!
-          // 🚫 REMOVE OS CUPONS!
-          // cupons: { ... }
+          descricao: true,
         },
         orderBy: {
           nome: 'asc'
@@ -51,7 +49,7 @@ class FrontLojaController {
           logo: true,
           email: true,
           categoria: true,
-          descricao: true // ← ADICIONA DESCRIÇÃO AQUI TAMBÉM!
+          descricao: true
         },
         orderBy: {
           nome: 'asc'
@@ -71,7 +69,7 @@ class FrontLojaController {
     }
   };
 
-  // Buscar loja específica por ID (essa pode trazer cupons)
+  // 🔥 Buscar loja específica por ID COM TODOS OS DADOS DOS CUPONS
   getLojaById = async (req, res) => {
     try {
       const { id } = req.params;
@@ -93,11 +91,16 @@ class FrontLojaController {
             },
             select: {
               id: true,
-              descricao: true,
               codigo: true,
+              descricao: true,
               logo: true,
               dataExpiracao: true,
-              quantidadePorCliente: true
+              quantidadePorCliente: true,
+              // 🔥 NOVOS CAMPOS FINANCEIROS
+              precoOriginal: true,
+              precoComDesconto: true,
+              percentualDesconto: true,
+              nomeProduto: true
             },
             orderBy: {
               dataExpiracao: 'asc'

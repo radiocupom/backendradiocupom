@@ -235,6 +235,29 @@ async createCliente(data) {
   return clienteSemSenha;
 }
 
+async getClienteByLoja(lojaId, clienteId, usuario) {
+  // Verifica permissão se for loja
+  if (usuario.userRole === 'loja') {
+    const temPermissao = await this.repository.verificarPermissaoLoja(usuario.userId, lojaId);
+    
+    if (!temPermissao) {
+      throw new Error('Você só pode acessar clientes da sua própria loja');
+    }
+  }
+
+  // Busca o cliente com seus resgates da loja
+  const cliente = await this.repository.findClienteByLoja(lojaId, clienteId);
+  
+  if (!cliente) {
+    throw new Error('Cliente não encontrado nesta loja');
+  }
+
+  // Remove a senha
+  const { senha, ...clienteSemSenha } = cliente;
+  
+  return clienteSemSenha;
+}
+
   // ================= EXCLUSÃO =================
   async deleteCliente(id, isAdmin = false) {
     const cliente = await this.repository.findById(id);

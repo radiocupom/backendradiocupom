@@ -22,6 +22,11 @@ class FrontCupomController {
           logo: true,
           dataExpiracao: true,
           quantidadePorCliente: true,
+          // 🔥 NOVOS CAMPOS DE PREÇO
+          precoOriginal: true,
+          precoComDesconto: true,
+          percentualDesconto: true,
+          nomeProduto: true,
           loja: {
             select: {
               id: true,
@@ -50,7 +55,7 @@ class FrontCupomController {
     }
   };
 
-  // ================= CUPONS POR LOJA (NOVO!) =================
+  // ================= CUPONS POR LOJA =================
   listarCuponsPorLoja = async (req, res) => {
     try {
       const { lojaId } = req.params;
@@ -75,7 +80,7 @@ class FrontCupomController {
         });
       }
 
-      // Busca os cupons da loja
+      // Busca os cupons da loja com TODOS os campos
       const cupons = await prisma.cupom.findMany({
         where: {
           lojaId: lojaId,
@@ -89,7 +94,12 @@ class FrontCupomController {
           descricao: true,
           logo: true,
           dataExpiracao: true,
-          quantidadePorCliente: true
+          quantidadePorCliente: true,
+          // 🔥 NOVOS CAMPOS DE PREÇO
+          precoOriginal: true,
+          precoComDesconto: true,
+          percentualDesconto: true,
+          nomeProduto: true
         },
         orderBy: {
           dataExpiracao: 'asc'
@@ -131,6 +141,11 @@ class FrontCupomController {
           logo: true,
           dataExpiracao: true,
           quantidadePorCliente: true,
+          // 🔥 NOVOS CAMPOS DE PREÇO
+          precoOriginal: true,
+          precoComDesconto: true,
+          percentualDesconto: true,
+          nomeProduto: true,
           loja: {
             select: {
               id: true,

@@ -208,6 +208,27 @@ create = async (req, res) => {
       res.status(400).json({ error: err.message });
     }
   };
+
+  /**
+ * Buscar um cliente específico da loja
+ */
+getClienteByLoja = async (req, res) => {
+  try {
+    const { lojaId, clienteId } = req.params;
+    
+    const cliente = await this.service.getClienteByLoja(lojaId, clienteId, {
+      userId: req.user.id,
+      userRole: req.user.role
+    });
+    
+    res.json(cliente);
+    
+  } catch (err) {
+    console.error('Erro ao buscar cliente da loja:', err);
+    res.status(400).json({ error: err.message });
+  }
+};
+
 }
 
 module.exports = ClienteController;

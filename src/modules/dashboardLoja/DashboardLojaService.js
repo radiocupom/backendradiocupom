@@ -1,4 +1,6 @@
 const DashboardLojaRepository = require('./DashboardLojaRepository');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 class DashboardLojaService {
   constructor() {
@@ -128,10 +130,11 @@ class DashboardLojaService {
     }));
   }
 
-  /**
-   * Resgates por dia (últimos 7 dias) com valores
-   */
-  async getResgatesPorDia(usuarioId) {
+/**
+ * Resgates por dia (últimos 7 dias) com valores
+ */
+async getResgatesPorDia(usuarioId) {
+  try {
     const loja = await this.getLojaByUsuarioId(usuarioId);
     
     const dataFim = new Date();
@@ -139,7 +142,38 @@ class DashboardLojaService {
     dataInicio.setDate(dataInicio.getDate() - 6);
     dataInicio.setHours(0, 0, 0, 0);
     
-    const resgates = await this.repository.findResgatesPorDia(loja.id, dataInicio, dataFim);
+    console.log('🔍 Buscando resgates por dia:', {
+      lojaId: loja.id,
+      dataInicio,
+      dataFim
+    });
+    
+    // Buscar resgates do período com detalhes do cupom
+    const resgates = await prisma.resgate.findMany({
+      where: {
+        cupom: { 
+          lojaId: loja.id 
+        },
+        resgatadoEm: {
+          gte: dataInicio,
+          lte: dataFim
+        }
+      },
+      include: {
+        cupom: {
+          select: {
+            id: true,
+            precoComDesconto: true,
+            precoOriginal: true
+          }
+        }
+      },
+      orderBy: {
+        resgatadoEm: 'asc'
+      }
+    });
+    
+    console.log(`✅ Encontrados ${resgates.length} resgates no período`);
     
     // Agrupar por dia
     const dias = [];
@@ -152,15 +186,100 @@ class DashboardLojaService {
         return dataResgate.toDateString() === dia.toDateString();
       });
       
+      // Calcular valor total do dia
+      const valorTotalDia = resgatesDia.reduce((acc, r) => {
+        return acc + (r.cupom?.precoComDesconto || 0);
+      }, 0);
+      
       dias.push({
-        dia: dia.toLocaleDateString('pt-BR', { weekday: 'short' }),
+        dia: dia.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''),
         data: dia.toISOString().split('T')[0],
-        total: resgatesDia.reduce((acc, r) => acc + (r._count || 0), 0),
-        valorTotal: 0 // Seria necessário buscar os cupons para calcular
+        total: resgatesDia.length,
+        valorTotal: valorTotalDia
       });
     }
     
+    console.log('📊 Dados processados:', dias);
     return dias;
+    
+  } catch (error) {
+    console.error('❌ Erro em getResgatesPorDia:', error);
+    throw error;
+  }
+}
+
+  // ================= NOVOS MÉTODOS PARA QR CODES =================
+
+  /**
+   * Busca QR codes resgatados
+   */
+  async getQrCodesResgatados(usuarioId, limit = 50) {
+    const loja = await this.getLojaByUsuarioId(usuarioId);
+    return this.repository.findQrCodesResgatados(loja.id, null, null, limit);
+  }
+
+  /**
+   * Busca QR codes validados
+   */
+  async getQrCodesValidados(usuarioId, limit = 50) {
+    const loja = await this.getLojaByUsuarioId(usuarioId);
+    return this.repository.findQrCodesValidados(loja.id, null, null, limit);
+  }
+
+  /**
+   * Busca estatísticas de validação de QR codes
+   */
+  async getQrCodeStats(usuarioId) {
+    const loja = await this.getLojaByUsuarioId(usuarioId);
+    return this.repository.getQrCodeStats(loja.id);
+  }
+
+  /**
+   * Busca QR codes com filtros avançados
+   */
+  async getQrCodesWithFilters(usuarioId, filters) {
+    const loja = await this.getLojaByUsuarioId(usuarioId);
+    return this.repository.findQrCodesWithFilters(loja.id, filters);
+  }
+
+  /**
+   * Busca QR codes resgatados por período
+   */
+  async getQrCodesResgatadosPorPeriodo(usuarioId, dataInicio, dataFim, limit = 50) {
+    const loja = await this.getLojaByUsuarioId(usuarioId);
+    return this.repository.findQrCodesResgatados(loja.id, dataInicio, dataFim, limit);
+  }
+
+  /**
+   * Busca QR codes validados por período
+   */
+  async getQrCodesValidadosPorPeriodo(usuarioId, dataInicio, dataFim, limit = 50) {
+    const loja = await this.getLojaByUsuarioId(usuarioId);
+    return this.repository.findQrCodesValidados(loja.id, dataInicio, dataFim, limit);
+  }
+
+  /**
+   * Calcula a taxa de validação da loja
+   */
+  async getTaxaValidacao(usuarioId) {
+    const loja = await this.getLojaByUsuarioId(usuarioId);
+    return this.repository.getTaxaValidacao(loja.id);
+  }
+
+  /**
+   * Calcula o tempo médio de validação
+   */
+  async getTempoMedioValidacao(usuarioId) {
+    const loja = await this.getLojaByUsuarioId(usuarioId);
+    return this.repository.getTempoMedioValidacao(loja.id);
+  }
+
+  /**
+   * Busca resgates com valores e status de validação
+   */
+  async getResgatesComValidacao(usuarioId, limit = 10) {
+    const loja = await this.getLojaByUsuarioId(usuarioId);
+    return this.repository.findUltimosResgates(loja.id, limit);
   }
 
   /**
@@ -186,9 +305,54 @@ class DashboardLojaService {
       },
       ultimosResgates: dados.ultimosResgates,
       cuponsPopulares: dados.cuponsPopulares,
-      resgatesPorDia: dados.resgatesPorDia
+      resgatesPorDia: dados.resgatesPorDia,
+      // 🔥 NOVOS DADOS DE QR CODE
+      qrCodeStats: await this.getQrCodeStats(usuarioId)
     };
   }
+
+  /**
+ * Buscar dados completos de uma loja específica por ID (para admin)
+ * @param {string} lojaId - ID da loja
+ */
+async getDadosCompletosPorLojaId(lojaId) {
+  try {
+    console.log(`📦 Service buscando dados da loja: ${lojaId}`);
+    
+    // 🔥 Busca os dados completos usando o repositório
+    const dados = await this.repository.findDadosCompletos(lojaId);
+    
+    // 🔥 Busca estatísticas de QR codes
+    const qrCodeStats = await this.repository.getQrCodeStats(lojaId);
+    
+    // 🔥 Busca o nome da loja (se não veio no findDadosCompletos)
+    const loja = await this.repository.findLojaById(lojaId);
+    
+    return {
+      kpis: {
+        loja: {
+          id: lojaId,
+          nome: loja?.nome || 'Loja'
+        },
+        cupons: dados.totais.cupons,
+        resgates: dados.totais.resgates,
+        qrCodes: dados.totais.qrCodes,
+        clientes: {
+          total: dados.totais.clientes
+        },
+        financeiro: dados.totais.financeiro
+      },
+      ultimosResgates: dados.ultimosResgates,
+      cuponsPopulares: dados.cuponsPopulares,
+      resgatesPorDia: dados.resgatesPorDia,
+      qrCodeStats
+    };
+    
+  } catch (error) {
+    console.error('❌ Erro ao buscar dados da loja por ID:', error);
+    throw error;
+  }
+}
 }
 
 module.exports = DashboardLojaService;

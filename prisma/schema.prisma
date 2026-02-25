@@ -145,6 +145,8 @@ model Resgate {
   cupom       Cupom    @relation(fields: [cupomId], references: [id])
   resgatadoEm DateTime @default(now()) @map("resgatado_em")
 
+  
+
   @@unique([clienteId, cupomId])
   @@map("resgates")
 }
