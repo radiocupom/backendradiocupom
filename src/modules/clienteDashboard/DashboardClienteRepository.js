@@ -201,6 +201,91 @@ class DashboardClienteRepository {
       data: dados
     });
   }
+  // ================= ECONOMIA =================
+async getEconomiaTotal(clienteId) {
+    const resgates = await prisma.resgate.findMany({
+      where: { clienteId },
+      include: {
+        cupom: {
+          select: {
+            precoOriginal: true,
+            precoComDesconto: true
+          }
+        }
+      }
+    });
+
+    console.log('💰 Resgates para economia total:', resgates); // 🔥 LOG
+
+    let economiaTotal = 0;
+    resgates.forEach(resgate => {
+      const economiaPorItem = (resgate.cupom.precoOriginal || 0) - (resgate.cupom.precoComDesconto || 0);
+      economiaTotal += economiaPorItem * resgate.quantidade;
+      
+      console.log('   Item:', { // 🔥 LOG
+        precoOriginal: resgate.cupom.precoOriginal,
+        precoComDesconto: resgate.cupom.precoComDesconto,
+        economiaPorItem,
+        quantidade: resgate.quantidade,
+        subtotal: economiaPorItem * resgate.quantidade
+      });
+    });
+
+    console.log('💰 Economia total calculada:', economiaTotal);
+    return economiaTotal;
+  }
+
+async getEconomiaPorLoja(clienteId) {
+  const resgates = await prisma.resgate.findMany({
+    where: { clienteId },
+    include: {
+      cupom: {
+        include: {
+          loja: {
+            select: {
+              id: true,
+              nome: true,
+              logo: true
+            }
+          }
+        }
+        // ❌ REMOVA este select completamente
+      }
+    }
+  });
+
+  const economiaPorLoja = {};
+
+  resgates.forEach(resgate => {
+    const lojaId = resgate.cupom.loja.id;
+    const lojaNome = resgate.cupom.loja.nome;
+    const lojaLogo = resgate.cupom.loja.logo;
+    const precoOriginal = resgate.cupom.precoOriginal || 0;
+    const precoComDesconto = resgate.cupom.precoComDesconto || 0;
+    
+    if (!economiaPorLoja[lojaId]) {
+      economiaPorLoja[lojaId] = {
+        lojaId,
+        lojaNome,
+        lojaLogo,
+        totalEconomia: 0,
+        totalResgates: 0,
+        cuponsUtilizados: new Set()
+      };
+    }
+
+    const economiaPorItem = precoOriginal - precoComDesconto;
+    economiaPorLoja[lojaId].totalEconomia += economiaPorItem * resgate.quantidade;
+    economiaPorLoja[lojaId].totalResgates += resgate.quantidade;
+    economiaPorLoja[lojaId].cuponsUtilizados.add(resgate.cupomId);
+  });
+
+  return Object.values(economiaPorLoja).map(loja => ({
+    ...loja,
+    cuponsUtilizados: loja.cuponsUtilizados.size
+  }));
+}
+
 }
 
 module.exports = DashboardClienteRepository;

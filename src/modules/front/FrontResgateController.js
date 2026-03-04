@@ -18,12 +18,10 @@ class FrontResgateController {
         });
       }
 
-      // Buscar cupom com detalhes - USANDO ÍNDICE NATURAL (id)
+      // Buscar cupom com detalhes
       const cupom = await prisma.cupom.findUnique({
         where: { id: cupomId },
-        include: {
-          loja: true
-        }
+        include: { loja: true }
       });
 
       if (!cupom) {
@@ -48,33 +46,24 @@ class FrontResgateController {
         });
       }
 
-      // 🔥 NOVA REGRA: Verificar se ainda há QR codes NÃO VALIDADOS disponíveis
-      // Usando índice composto em qrCodesUsados (cupomId, validado)
-      const qrCodesNaoValidados = await prisma.qrCodeUsado.count({
-        where: {
-          cupomId,
-          validado: false
-        }
+      // Verificar se ainda há QR codes disponíveis (limite total do cupom)
+      const qrCodesExistentes = await prisma.qrCodeUsado.count({
+        where: { cupomId }
       });
 
-      if (qrCodesNaoValidados >= cupom.totalQrCodes) {
+      if (qrCodesExistentes >= cupom.totalQrCodes) {
         return res.status(400).json({
           success: false,
-          error: 'Todos os QR codes deste cupom já foram resgatados'
+          error: 'Todos os QR codes deste cupom já foram gerados'
         });
       }
 
-      // Verificar limite do cliente - usando índice composto (clienteId, cupomId)
-      const resgateExistente = await prisma.resgate.findUnique({
-        where: {
-          clienteId_cupomId: {
-            clienteId,
-            cupomId
-          }
-        }
+      // 🔥 VERIFICAR LIMITE POR CLIENTE (soma de todas as quantidades)
+      const resgatesDoCliente = await prisma.resgate.findMany({
+        where: { clienteId, cupomId }
       });
 
-      const quantidadeAtual = resgateExistente ? resgateExistente.quantidade : 0;
+      const quantidadeAtual = resgatesDoCliente.reduce((total, r) => total + r.quantidade, 0);
 
       if (quantidadeAtual >= cupom.quantidadePorCliente) {
         return res.status(400).json({
@@ -87,61 +76,50 @@ class FrontResgateController {
 
       // ================= FAZER O RESGATE EM TRANSAÇÃO =================
       const resultado = await prisma.$transaction(async (prisma) => {
-        // 1. Atualizar ou criar resgate
-        const resgate = await prisma.resgate.upsert({
-          where: {
-            clienteId_cupomId: {
-              clienteId,
-              cupomId
-            }
-          },
-          update: {
-            quantidade: {
-              increment: 1
-            }
-          },
-          create: {
+        // 1. Criar um NOVO registro de resgate
+        const resgate = await prisma.resgate.create({
+          data: {
             clienteId,
             cupomId,
-            quantidade: 1
+            quantidade: 1,
+            resgatadoEm: new Date()
           }
         });
 
-        // 2. 🔥 NÃO incrementa mais qrCodesUsados (agora só na validação)
+        // 2. Gerar código ÚNICO para o QR code (cada resgate tem seu próprio código)
+        const timestamp = Date.now();
+        const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+        const codigoUnico = `${cupom.codigo}-${timestamp}-${clienteId.substring(0, 8)}-${random}`;
 
-        // 3. Gerar código único para o QR code
-        const sequencial = await prisma.qrCodeUsado.count({
-          where: { cupomId }
-        }) + 1;
-        
-        const codigoQR = `${cupom.codigo}-${sequencial}-${Date.now()}`;
-
-        // 4. Registrar QR code NÃO VALIDADO
+        // 3. Registrar QR code NÃO VALIDADO com o código único e resgateId
         const qrCodeUsado = await prisma.qrCodeUsado.create({
           data: {
             cupomId,
-            codigo: codigoQR,
+            codigo: codigoUnico,
             clienteId,
+            resgateId: resgate.id, // ← CAMPO ADICIONADO
             validado: false,
             usadoEm: new Date()
           }
         });
 
-        return { 
-          resgate, 
-          qrCode: qrCodeUsado
-        };
+        return { resgate, qrCode: qrCodeUsado };
       });
 
-      // ================= GERAR IMAGEM DO QR CODE =================
-      const qrCodeImage = await QRCode.toDataURL(resultado.qrCode.codigo);
+      // 🔥 GERAR QR CODE COM A URL COMPLETA (usando o ID do QR code)
+      const baseUrl = process.env.BASE_URL || 'https://adm.radiocupom.online';
+      const urlValidacao = `${baseUrl}/dashboard-loja/validar/dados/${resultado.qrCode.id}`;
+      
+      const qrCodeImage = await QRCode.toDataURL(urlValidacao);
 
-      // 🔥 Calcular disponibilidade baseado em NÃO VALIDADOS
-      const qrCodesNaoValidadosTotal = await prisma.qrCodeUsado.count({
-        where: {
-          cupomId,
-          validado: false
-        }
+      // Calcular estatísticas atualizadas
+      const resgatesAtualizados = await prisma.resgate.findMany({
+        where: { clienteId, cupomId }
+      });
+      const novaQuantidade = resgatesAtualizados.reduce((total, r) => total + r.quantidade, 0);
+      
+      const qrCodesGerados = await prisma.qrCodeUsado.count({
+        where: { cupomId }
       });
 
       res.json({
@@ -150,20 +128,34 @@ class FrontResgateController {
         data: {
           resgate: resultado.resgate,
           qrCode: {
-  id: resultado.qrCode.id,
-  codigo: resultado.qrCode.codigo,
-  imagem: qrCodeImage,
-  // sequencial: sequencial - 1,  ← REMOVER ESTA LINHA!
-  validado: false
-},
+            id: resultado.qrCode.id,
+            codigo: resultado.qrCode.codigo,
+            imagem: qrCodeImage,
+            url: urlValidacao,
+            validado: false
+          },
           cupom: {
             id: cupom.id,
+            codigo: cupom.codigo,
             descricao: cupom.descricao,
-            codigo: cupom.codigo
+            titulo: cupom.titulo || cupom.descricao,
+            nomeProduto: cupom.nomeProduto,
+            precoOriginal: cupom.precoOriginal,
+            precoComDesconto: cupom.precoComDesconto,
+            percentualDesconto: cupom.percentualDesconto,
+            dataExpiracao: cupom.dataExpiracao,
+            termos: cupom.termos,
+            observacoes: cupom.observacoes,
+            loja: {
+              id: cupom.loja.id,
+              nome: cupom.loja.nome,
+              logo: cupom.loja.logo,
+              telefone: cupom.loja.telefone
+            }
           },
           estatisticas: {
-            resgatesRestantes: cupom.quantidadePorCliente - (quantidadeAtual + 1),
-            qrCodesDisponiveis: cupom.totalQrCodes - qrCodesNaoValidadosTotal
+            resgatesRestantes: cupom.quantidadePorCliente - novaQuantidade,
+            qrCodesDisponiveis: cupom.totalQrCodes - qrCodesGerados
           }
         }
       });
@@ -182,63 +174,52 @@ class FrontResgateController {
     try {
       const clienteId = req.cliente.id;
 
-      // Buscar resgates com índices otimizados
-      const resgates = await prisma.resgate.findMany({
-        where: { clienteId }, // Usa índice em clienteId
+      // Busca TODOS os QR codes do cliente (cada resgate tem seu próprio QR code)
+      const qrCodes = await prisma.qrCodeUsado.findMany({
+        where: { clienteId },
         include: {
           cupom: {
             include: {
               loja: {
-                select: {
-                  nome: true,
-                  logo: true
-                }
+                select: { nome: true, logo: true }
               }
             }
           }
         },
-        orderBy: {
-          resgatadoEm: 'desc'
-        }
-      });
-
-      // Buscar QR codes do cliente - usando índice em clienteId
-      const qrCodesUsados = await prisma.qrCodeUsado.findMany({
-        where: { clienteId }, // Usa índice em clienteId
         orderBy: { usadoEm: 'desc' }
       });
 
-      // Mapear QR codes para os resgates (em memória - mais rápido que múltiplas queries)
-      const qrCodeMap = new Map();
-      qrCodesUsados.forEach(qr => {
-        qrCodeMap.set(qr.cupomId, qr);
-      });
-
-      const resgatesComQrCode = resgates.map(resgate => ({
-        ...resgate,
-        qrCode: qrCodeMap.get(resgate.cupomId) || null
-      }));
-
-      // Gerar imagens (paralelo para performance)
-      const resgatesComImagem = await Promise.all(
-        resgatesComQrCode.map(async (item) => {
-          if (item.qrCode) {
-            const imagem = await QRCode.toDataURL(item.qrCode.codigo);
-            return {
-              ...item,
-              qrCode: {
-                ...item.qrCode,
-                imagem
-              }
-            };
-          }
-          return item;
+      // Gerar imagens para cada QR code
+      const baseUrl = process.env.BASE_URL || 'https://adm.radiocupom.online';
+      
+      const qrCodesComImagem = await Promise.all(
+        qrCodes.map(async (qrCode) => {
+          const urlValidacao = `${baseUrl}/dashboard-loja/validar/dados/${qrCode.id}`;
+          const imagem = await QRCode.toDataURL(urlValidacao);
+          
+          return {
+            id: qrCode.id,
+            codigo: qrCode.codigo,
+            imagem,
+            url: urlValidacao,
+            usadoEm: qrCode.usadoEm,
+            validado: qrCode.validado,
+            validadoEm: qrCode.validadoEm,
+            cupom: {
+              id: qrCode.cupom.id,
+              codigo: qrCode.cupom.codigo,
+              descricao: qrCode.cupom.descricao,
+              titulo: qrCode.cupom.titulo,
+              nomeProduto: qrCode.cupom.nomeProduto,
+              loja: qrCode.cupom.loja
+            }
+          };
         })
       );
 
       res.json({
         success: true,
-        data: resgatesComImagem
+        data: qrCodesComImagem
       });
 
     } catch (err) {
@@ -256,29 +237,16 @@ class FrontResgateController {
       const clienteId = req.cliente.id;
       const { cupomId } = req.params;
 
-      // Buscar cupom e resgate em paralelo para performance
-      const [cupom, resgate] = await Promise.all([
-        prisma.cupom.findUnique({
-          where: { id: cupomId }, // Usa índice em id
-          select: {
-            id: true,
-            quantidadePorCliente: true,
-            dataExpiracao: true,
-            totalQrCodes: true,
-            loja: {
-              select: { payment: true }
-            }
-          }
-        }),
-        prisma.resgate.findUnique({
-          where: {
-            clienteId_cupomId: { // Usa índice composto
-              clienteId,
-              cupomId
-            }
-          }
-        })
-      ]);
+      const cupom = await prisma.cupom.findUnique({
+        where: { id: cupomId },
+        select: {
+          id: true,
+          quantidadePorCliente: true,
+          dataExpiracao: true,
+          totalQrCodes: true,
+          loja: { select: { payment: true } }
+        }
+      });
 
       if (!cupom) {
         return res.status(404).json({
@@ -287,28 +255,27 @@ class FrontResgateController {
         });
       }
 
-      // Contar QR codes não validados - usando índice composto
-      const qrCodesNaoValidados = await prisma.qrCodeUsado.count({
-        where: {
-          cupomId,
-          validado: false
+      // Contar quantos QR codes o cliente já tem para este cupom
+      const qrCodesDoCliente = await prisma.qrCodeUsado.count({
+        where: { 
+          clienteId, 
+          cupomId 
         }
       });
 
-      const quantidadeAtual = resgate ? resgate.quantidade : 0;
-      const podeResgatar = quantidadeAtual < cupom.quantidadePorCliente;
       const lojaAtiva = cupom.loja.payment;
       const naoExpirado = new Date() < cupom.dataExpiracao;
-      const temQrCode = qrCodesNaoValidados < cupom.totalQrCodes;
+      const temQrCode = qrCodesDoCliente < cupom.totalQrCodes;
+      const podeResgatar = qrCodesDoCliente < cupom.quantidadePorCliente;
 
       res.json({
         success: true,
         data: {
           podeResgatar: podeResgatar && lojaAtiva && naoExpirado && temQrCode,
-          quantidadeAtual,
+          quantidadeAtual: qrCodesDoCliente,
           limite: cupom.quantidadePorCliente,
-          restantes: cupom.quantidadePorCliente - quantidadeAtual,
-          qrCodesDisponiveis: cupom.totalQrCodes - qrCodesNaoValidados,
+          restantes: cupom.quantidadePorCliente - qrCodesDoCliente,
+          qrCodesDisponiveis: cupom.totalQrCodes - qrCodesDoCliente,
           lojaAtiva,
           naoExpirado
         }
@@ -330,13 +297,13 @@ class FrontResgateController {
       const clienteId = req.cliente.id;
 
       const qrCode = await prisma.qrCodeUsado.findUnique({
-        where: { id }, // Usa índice em id
-        include: {
-          cupom: {
-            include: {
-              loja: true
-            }
-          }
+        where: { id },
+        include: { 
+          cupom: { 
+            include: { 
+              loja: true 
+            } 
+          } 
         }
       });
 
@@ -347,7 +314,6 @@ class FrontResgateController {
         });
       }
 
-      // Verificar se o QR code pertence ao cliente
       if (qrCode.clienteId !== clienteId) {
         return res.status(403).json({
           success: false,
@@ -355,8 +321,9 @@ class FrontResgateController {
         });
       }
 
-      // Gerar imagem
-      const imagem = await QRCode.toDataURL(qrCode.codigo);
+      const baseUrl = process.env.BASE_URL || 'https://adm.radiocupom.online';
+      const urlValidacao = `${baseUrl}/dashboard-loja/validar/dados/${qrCode.id}`;
+      const imagem = await QRCode.toDataURL(urlValidacao);
 
       res.json({
         success: true,
@@ -364,14 +331,27 @@ class FrontResgateController {
           id: qrCode.id,
           codigo: qrCode.codigo,
           imagem,
+          url: urlValidacao,
           usadoEm: qrCode.usadoEm,
           validado: qrCode.validado,
           validadoEm: qrCode.validadoEm,
           cupom: {
             id: qrCode.cupom.id,
-            descricao: qrCode.cupom.descricao,
             codigo: qrCode.cupom.codigo,
-            loja: qrCode.cupom.loja.nome
+            descricao: qrCode.cupom.descricao,
+            titulo: qrCode.cupom.titulo,
+            nomeProduto: qrCode.cupom.nomeProduto,
+            precoOriginal: qrCode.cupom.precoOriginal,
+            precoComDesconto: qrCode.cupom.precoComDesconto,
+            percentualDesconto: qrCode.cupom.percentualDesconto,
+            dataExpiracao: qrCode.cupom.dataExpiracao,
+            termos: qrCode.cupom.termos,
+            observacoes: qrCode.cupom.observacoes,
+            loja: {
+              id: qrCode.cupom.loja.id,
+              nome: qrCode.cupom.loja.nome,
+              logo: qrCode.cupom.loja.logo
+            }
           }
         }
       });
@@ -388,33 +368,20 @@ class FrontResgateController {
   // ================= VALIDAR QR CODE NA LOJA =================
   validarQrCodeLoja = async (req, res) => {
     try {
-      const { codigo } = req.body;
+      // Aceitar tanto codigo (manual) quanto qrCodeId (QR code)
+      const { codigo, qrCodeId } = req.body;
       
-      if (!codigo) {
+      if (!codigo && !qrCodeId) {
         return res.status(400).json({
           success: false,
-          error: 'Código do QR code é obrigatório'
+          error: 'Código do QR code ou ID é obrigatório'
         });
       }
 
-      // Buscar loja do usuário em paralelo com o QR code
-      const [usuario, qrCode] = await Promise.all([
+      const [usuario] = await Promise.all([
         prisma.usuario.findUnique({
-          where: { id: req.user.id }, // Usa índice em id
+          where: { id: req.user.id },
           include: { loja: true }
-        }),
-        prisma.qrCodeUsado.findUnique({
-          where: { codigo }, // Usa índice único em codigo
-          include: {
-            cupom: { 
-              include: { 
-                loja: true 
-              } 
-            },
-            cliente: {
-              select: { id: true, nome: true, email: true }
-            }
-          }
         })
       ]);
 
@@ -426,6 +393,28 @@ class FrontResgateController {
         });
       }
 
+      // Buscar QR code por ID ou por código
+      let qrCode;
+      if (qrCodeId) {
+        // Validação via QR code (por ID)
+        qrCode = await prisma.qrCodeUsado.findUnique({
+          where: { id: qrCodeId },
+          include: {
+            cupom: { include: { loja: true } },
+            cliente: { select: { id: true, nome: true, email: true, whatsapp: true } }
+          }
+        });
+      } else {
+        // Validação manual (por código)
+        qrCode = await prisma.qrCodeUsado.findUnique({
+          where: { codigo },
+          include: {
+            cupom: { include: { loja: true } },
+            cliente: { select: { id: true, nome: true, email: true, whatsapp: true } }
+          }
+        });
+      }
+
       if (!qrCode) {
         return res.status(404).json({
           success: false,
@@ -434,7 +423,7 @@ class FrontResgateController {
         });
       }
 
-      // VERIFICAÇÕES
+      // Verificar se o QR code pertence à loja do comerciante
       if (qrCode.cupom.lojaId !== lojaId) {
         return res.status(403).json({
           success: false,
@@ -443,6 +432,7 @@ class FrontResgateController {
         });
       }
 
+      // Verificar se o cupom não expirou
       if (new Date() > qrCode.cupom.dataExpiracao) {
         return res.status(400).json({
           success: false,
@@ -451,6 +441,7 @@ class FrontResgateController {
         });
       }
 
+      // Verificar se a loja está com pagamento em dia
       if (!qrCode.cupom.loja.payment) {
         return res.status(400).json({
           success: false,
@@ -459,6 +450,7 @@ class FrontResgateController {
         });
       }
 
+      // Verificar se já foi validado
       if (qrCode.validado) {
         return res.status(400).json({
           success: false,
@@ -467,52 +459,41 @@ class FrontResgateController {
           data: {
             codigo: qrCode.codigo,
             validadoEm: qrCode.validadoEm,
-            cliente: qrCode.cliente,
-            primeiraValidacao: qrCode.validadoEm
+            cliente: qrCode.cliente
           }
         });
       }
 
-      // ✅ VALIDAÇÃO EM TRANSAÇÃO
-      const resultado = await prisma.$transaction(async (prisma) => {
-        // 1. Marcar QR code como validado
-        const qrCodeAtualizado = await prisma.qrCodeUsado.update({
-          where: { id: qrCode.id },
-          data: {
-            validado: true,
-            validadoEm: new Date()
-          }
-        });
-
-        // 2. Incrementar contador de QR codes usados no cupom
-        await prisma.cupom.update({
-          where: { id: qrCode.cupom.id },
-          data: {
-            qrCodesUsados: {
-              increment: 1
-            }
-          }
-        });
-
-        return qrCodeAtualizado;
+      // Validar o QR code
+      const qrCodeAtualizado = await prisma.qrCodeUsado.update({
+        where: { id: qrCode.id },
+        data: { validado: true, validadoEm: new Date() }
       });
+
+      // Se veio da validação por URL (qrCodeId), pode querer redirecionar ou mostrar página de sucesso
+      const viaQRCode = !!qrCodeId;
 
       res.json({
         success: true,
         message: 'QR Code validado com sucesso!',
         valido: true,
+        viaQRCode, // Indicar se veio da validação por QR code ou manual
         data: {
-          codigo: resultado.codigo,
-          usadoEm: resultado.usadoEm,
-          validadoEm: resultado.validadoEm,
+          id: qrCodeAtualizado.id,
+          codigo: qrCodeAtualizado.codigo,
+          usadoEm: qrCodeAtualizado.usadoEm,
+          validadoEm: qrCodeAtualizado.validadoEm,
           cliente: qrCode.cliente,
           cupom: {
             id: qrCode.cupom.id,
             descricao: qrCode.cupom.descricao,
-            codigo: qrCode.cupom.codigo
+            codigo: qrCode.cupom.codigo,
+            titulo: qrCode.cupom.titulo,
+            nomeProduto: qrCode.cupom.nomeProduto
           },
-          loja: {
-            nome: qrCode.cupom.loja.nome
+          loja: { 
+            id: qrCode.cupom.loja.id,
+            nome: qrCode.cupom.loja.nome 
           }
         }
       });
@@ -525,188 +506,120 @@ class FrontResgateController {
       });
     }
   };
-// ================= LISTAR RESGATES DA LOJA =================
-listarResgatesLoja = async (req, res) => {
-  try {
-    console.log('🔍 listarResgatesLoja - Iniciando');
-    console.log('👤 Usuário:', req.user);
-    
-    const usuarioId = req.user.id;
-    console.log('🔍 Usuário ID:', usuarioId);
 
-    // Buscar a loja do usuário
-    const usuario = await prisma.usuario.findUnique({
-      where: { id: usuarioId },
-      include: { loja: true }
-    });
+  // ================= LISTAR RESGATES DA LOJA =================
+  listarResgatesLoja = async (req, res) => {
+    try {
+      const usuarioId = req.user.id;
+      const usuario = await prisma.usuario.findUnique({
+        where: { id: usuarioId },
+        include: { loja: true }
+      });
 
-    console.log('🔍 Usuário encontrado:', usuario ? 'sim' : 'não');
-    
-    if (!usuario?.loja) {
-      console.log('❌ Lojista não possui loja associada');
-      return res.status(400).json({
+      if (!usuario?.loja) {
+        return res.status(400).json({
+          success: false,
+          error: 'Lojista não possui uma loja associada'
+        });
+      }
+
+      const lojaId = usuario.loja.id;
+
+      // Agora listamos os QR codes em vez dos resgates
+      const qrCodes = await prisma.qrCodeUsado.findMany({
+        where: { 
+          cupom: { lojaId } 
+        },
+        include: {
+          cliente: { select: { id: true, nome: true, email: true, whatsapp: true } },
+          cupom: { select: { id: true, codigo: true, descricao: true, logo: true } }
+        },
+        orderBy: { usadoEm: 'desc' }
+      });
+
+      const qrCodesFormatados = qrCodes.map(qr => ({
+        id: qr.id,
+        codigo: qr.codigo,
+        clienteId: qr.cliente?.id,
+        clienteNome: qr.cliente?.nome,
+        clienteEmail: qr.cliente?.email,
+        clienteWhatsapp: qr.cliente?.whatsapp,
+        cupomId: qr.cupom.id,
+        cupomCodigo: qr.cupom.codigo,
+        cupomDescricao: qr.cupom.descricao,
+        cupomLogo: qr.cupom.logo,
+        usadoEm: qr.usadoEm,
+        validado: qr.validado,
+        validadoEm: qr.validadoEm
+      }));
+
+      res.json({ success: true, data: qrCodesFormatados });
+
+    } catch (err) {
+      console.error('❌ Erro detalhado:', err);
+      res.status(500).json({
         success: false,
-        error: 'Lojista não possui uma loja associada'
+        error: 'Erro ao carregar resgates',
+        details: err.message
       });
     }
+  };
 
-    const lojaId = usuario.loja.id;
-    console.log('🏪 Loja ID:', lojaId);
+  // ================= LISTAR QR CODES DA LOJA =================
+  listarQrCodesLoja = async (req, res) => {
+    try {
+      const usuarioId = req.user.id;
+      const usuario = await prisma.usuario.findUnique({
+        where: { id: usuarioId },
+        include: { loja: true }
+      });
 
-    // Buscar todos os resgates dos cupons da loja
-    console.log('🔍 Buscando resgates...');
-    const resgates = await prisma.resgate.findMany({
-      where: {
-        cupom: {
-          lojaId: lojaId
-        }
-      },
-      include: {
-        cliente: {
-          select: {
-            id: true,
-            nome: true,
-            email: true,
-            whatsapp: true
-          }
-        },
-        cupom: {
-          select: {
-            id: true,
-            codigo: true,
-            descricao: true,
-            logo: true
-          }
-        }
-        // 🔥 REMOVA O BLOCO qrCodes COMPLETAMENTE
-      },
-      orderBy: {
-        resgatadoEm: 'desc'
+      if (!usuario?.loja) {
+        return res.status(400).json({
+          success: false,
+          error: 'Lojista não possui uma loja associada'
+        });
       }
-    });
 
-    console.log(`✅ Encontrados ${resgates.length} resgates`);
+      const lojaId = usuario.loja.id;
 
-    // Formatar os dados para o frontend
-    const resgatesFormatados = resgates.map(resgate => ({
-      id: resgate.id,
-      clienteId: resgate.cliente.id,
-      clienteNome: resgate.cliente.nome,
-      clienteEmail: resgate.cliente.email,
-      clienteWhatsapp: resgate.cliente.whatsapp,
-      cupomId: resgate.cupom.id,
-      cupomCodigo: resgate.cupom.codigo,
-      cupomDescricao: resgate.cupom.descricao,
-      cupomLogo: resgate.cupom.logo,
-      quantidade: resgate.quantidade,
-      resgatadoEm: resgate.resgatadoEm,
-      // 🔥 TEMPORARIAMENTE SEM DADOS DE QR CODE
-      qrCodeId: null,
-      qrCodeValidado: false,
-      qrCodeValidadoEm: null
-    }));
+      const qrCodes = await prisma.qrCodeUsado.findMany({
+        where: { cupom: { lojaId } },
+        include: {
+          cupom: { select: { id: true, codigo: true, descricao: true, logo: true } },
+          cliente: { select: { id: true, nome: true, email: true, whatsapp: true } }
+        },
+        orderBy: { usadoEm: 'desc' }
+      });
 
-    res.json({
-      success: true,
-      data: resgatesFormatados
-    });
+      const qrCodesFormatados = qrCodes.map(qr => ({
+        id: qr.id,
+        codigo: qr.codigo,
+        cupomId: qr.cupom.id,
+        cupomCodigo: qr.cupom.codigo,
+        cupomDescricao: qr.cupom.descricao,
+        cupomLogo: qr.cupom.logo,
+        usadoEm: qr.usadoEm,
+        validado: qr.validado,
+        validadoEm: qr.validadoEm,
+        cliente: qr.cliente ? {
+          id: qr.cliente.id,
+          nome: qr.cliente.nome,
+          email: qr.cliente.email,
+          whatsapp: qr.cliente.whatsapp
+        } : null
+      }));
 
-  } catch (err) {
-    console.error('❌ Erro detalhado:', err);
-    console.error('❌ Stack:', err.stack);
-    res.status(500).json({
-      success: false,
-      error: 'Erro ao carregar resgates',
-      details: err.message
-    });
-  }
-};
+      res.json({ success: true, data: qrCodesFormatados });
 
-// ================= LISTAR QR CODES DA LOJA =================
-listarQrCodesLoja = async (req, res) => {
-  try {
-    console.log('🔍 listarQrCodesLoja - Iniciando');
-    
-    const usuarioId = req.user.id;
-
-    // Buscar a loja do usuário
-    const usuario = await prisma.usuario.findUnique({
-      where: { id: usuarioId },
-      include: { loja: true }
-    });
-
-    if (!usuario?.loja) {
-      return res.status(400).json({
+    } catch (err) {
+      console.error('❌ Erro ao listar QR codes:', err);
+      res.status(500).json({
         success: false,
-        error: 'Lojista não possui uma loja associada'
+        error: 'Erro ao carregar QR codes'
       });
     }
-
-    const lojaId = usuario.loja.id;
-
-    // Buscar todos os QR codes dos cupons da loja
-    const qrCodes = await prisma.qrCodeUsado.findMany({
-      where: {
-        cupom: {
-          lojaId: lojaId
-        }
-      },
-      include: {
-        cupom: {
-          select: {
-            id: true,
-            codigo: true,
-            descricao: true,
-            logo: true
-          }
-        },
-        cliente: {
-          select: {
-            id: true,
-            nome: true,
-            email: true
-          }
-        }
-      },
-      orderBy: {
-        usadoEm: 'desc'
-      }
-    });
-
-    console.log(`✅ Encontrados ${qrCodes.length} QR codes`);
-
-    // Formatar os dados
-    const qrCodesFormatados = qrCodes.map(qr => ({
-      id: qr.id,
-      codigo: qr.codigo,
-      cupomId: qr.cupom.id,
-      cupomCodigo: qr.cupom.codigo,
-      cupomDescricao: qr.cupom.descricao,
-      cupomLogo: qr.cupom.logo,
-      usadoEm: qr.usadoEm,
-      validado: qr.validado,
-      validadoEm: qr.validadoEm,
-      cliente: qr.cliente ? {
-        id: qr.cliente.id,
-        nome: qr.cliente.nome,
-        email: qr.cliente.email
-      } : null
-    }));
-
-    res.json({
-      success: true,
-      data: qrCodesFormatados
-    });
-
-  } catch (err) {
-    console.error('❌ Erro ao listar QR codes:', err);
-    res.status(500).json({
-      success: false,
-      error: 'Erro ao carregar QR codes'
-    });
-  }
-};
-
+  };
 }
 
 module.exports = new FrontResgateController();

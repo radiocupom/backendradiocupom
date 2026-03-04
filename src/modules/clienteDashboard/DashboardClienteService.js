@@ -6,35 +6,6 @@ class DashboardClienteService {
     this.repository = new DashboardClienteRepository();
   }
 
-  async getResumo(clienteId) {
-    const [
-      totalResgates,
-      cuponsUnicos,
-      totalQrCodes,
-      qrCodesValidados,
-      ultimoResgate
-    ] = await Promise.all([
-      this.repository.countTotalResgates(clienteId),
-      this.repository.countCuponsUnicos(clienteId),
-      this.repository.countQrCodes(clienteId),
-      this.repository.countQrCodesValidados(clienteId),
-      this.repository.getUltimoResgate(clienteId)
-    ]);
-
-    return {
-      totalResgates,
-      cuponsUnicos,
-      totalQrCodes,
-      qrCodesValidados,
-      qrCodesPendentes: totalQrCodes - qrCodesValidados,
-      ultimoResgate: ultimoResgate ? {
-        data: ultimoResgate.resgatadoEm,
-        cupom: ultimoResgate.cupom.descricao,
-        loja: ultimoResgate.cupom.loja.nome
-      } : null
-    };
-  }
-
   async getResgates(clienteId, { page, limit }) {
     const skip = (page - 1) * limit;
     
@@ -209,6 +180,42 @@ class DashboardClienteService {
     const { senha, ...clienteSemSenha } = clienteAtualizado;
     return clienteSemSenha;
   }
+  async getResumo(clienteId) {
+  const [
+    totalResgates,
+    cuponsUnicos,
+    totalQrCodes,
+    qrCodesValidados,
+    ultimoResgate,
+    economiaTotal,
+    economiaPorLoja
+  ] = await Promise.all([
+    this.repository.countTotalResgates(clienteId),
+    this.repository.countCuponsUnicos(clienteId),
+    this.repository.countQrCodes(clienteId),
+    this.repository.countQrCodesValidados(clienteId),
+    this.repository.getUltimoResgate(clienteId),
+    this.repository.getEconomiaTotal(clienteId),
+    this.repository.getEconomiaPorLoja(clienteId)
+  ]);
+
+  return {
+    totalResgates,
+    cuponsUnicos,
+    totalQrCodes,
+    qrCodesValidados,
+    qrCodesPendentes: totalQrCodes - qrCodesValidados,
+    ultimoResgate: ultimoResgate ? {
+      data: ultimoResgate.resgatadoEm,
+      cupom: ultimoResgate.cupom.descricao,
+      loja: ultimoResgate.cupom.loja.nome
+    } : null,
+    economia: {
+      total: economiaTotal,
+      porLoja: economiaPorLoja
+    }
+  };
+}
 }
 
 module.exports = DashboardClienteService;

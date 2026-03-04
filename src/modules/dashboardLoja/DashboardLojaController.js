@@ -9,28 +9,66 @@ class DashboardLojaController {
    * KPIs principais da loja com dados financeiros
    */
   getKPIs = async (req, res) => {
+    const startTime = Date.now();
+    const { id: usuarioId, email } = req.user;
+
     try {
-      const usuarioId = req.user.id;
+      console.log(`📊 [KPIs] Iniciando busca para lojista: ${email} (${usuarioId})`);
+
       const kpis = await this.service.getKPIs(usuarioId);
-      res.json(kpis);
-    } catch (err) {
-      console.error('Erro ao buscar KPIs:', err);
-      res.status(400).json({ error: err.message });
+
+      console.log(`✅ [KPIs] Finalizado em ${Date.now() - startTime}ms`);
+
+      return res.status(200).json({
+        success: true,
+        data: kpis
+      });
+
+    } catch (error) {
+      console.error(`❌ [KPIs] Erro para lojista ${email}:`, {
+        mensagem: error.message,
+        stack: error.stack,
+        tempo: `${Date.now() - startTime}ms`
+      });
+
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
     }
   };
 
   /**
-   * Últimos resgates da loja
+   * Últimos resgates da loja com status de validação
    */
   getUltimosResgates = async (req, res) => {
+    const startTime = Date.now();
+    const { id: usuarioId, email } = req.user;
+    const { limit = 10 } = req.query;
+
     try {
-      const usuarioId = req.user.id;
-      const { limit = 10 } = req.query;
-      const resgates = await this.service.getUltimosResgates(usuarioId, parseInt(limit));
-      res.json(resgates);
-    } catch (err) {
-      console.error('Erro ao buscar últimos resgates:', err);
-      res.status(400).json({ error: err.message });
+      console.log(`📊 [UltimosResgates] Iniciando para lojista: ${email} (limit: ${limit})`);
+
+      const resgates = await this.service.getUltimosResgates(usuarioId, Number(limit));
+
+      console.log(`✅ [UltimosResgates] Finalizado em ${Date.now() - startTime}ms`);
+
+      return res.status(200).json({
+        success: true,
+        data: resgates
+      });
+
+    } catch (error) {
+      console.error(`❌ [UltimosResgates] Erro:`, {
+        mensagem: error.message,
+        stack: error.stack,
+        tempo: `${Date.now() - startTime}ms`
+      });
+
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
     }
   };
 
@@ -38,14 +76,33 @@ class DashboardLojaController {
    * Cupons mais resgatados da loja
    */
   getCuponsPopulares = async (req, res) => {
+    const startTime = Date.now();
+    const { id: usuarioId, email } = req.user;
+    const { limit = 5 } = req.query;
+
     try {
-      const usuarioId = req.user.id;
-      const { limit = 5 } = req.query;
-      const cupons = await this.service.getCuponsPopulares(usuarioId, parseInt(limit));
-      res.json(cupons);
-    } catch (err) {
-      console.error('Erro ao buscar cupons populares:', err);
-      res.status(400).json({ error: err.message });
+      console.log(`📊 [CuponsPopulares] Iniciando para lojista: ${email} (limit: ${limit})`);
+
+      const cupons = await this.service.getCuponsPopulares(usuarioId, Number(limit));
+
+      console.log(`✅ [CuponsPopulares] Finalizado em ${Date.now() - startTime}ms`);
+
+      return res.status(200).json({
+        success: true,
+        data: cupons
+      });
+
+    } catch (error) {
+      console.error(`❌ [CuponsPopulares] Erro:`, {
+        mensagem: error.message,
+        stack: error.stack,
+        tempo: `${Date.now() - startTime}ms`
+      });
+
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
     }
   };
 
@@ -53,30 +110,66 @@ class DashboardLojaController {
    * Resgates por dia (últimos 7 dias)
    */
   getResgatesPorDia = async (req, res) => {
+    const startTime = Date.now();
+    const { id: usuarioId, email } = req.user;
+
     try {
-      const usuarioId = req.user.id;
+      console.log(`📊 [ResgatesPorDia] Iniciando para lojista: ${email}`);
+
       const dados = await this.service.getResgatesPorDia(usuarioId);
-      res.json(dados);
-    } catch (err) {
-      console.error('Erro ao buscar resgates por dia:', err);
-      res.status(400).json({ error: err.message });
+
+      console.log(`✅ [ResgatesPorDia] Finalizado em ${Date.now() - startTime}ms`);
+
+      return res.status(200).json({
+        success: true,
+        data: dados
+      });
+
+    } catch (error) {
+      console.error(`❌ [ResgatesPorDia] Erro:`, {
+        mensagem: error.message,
+        stack: error.stack,
+        tempo: `${Date.now() - startTime}ms`
+      });
+
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
     }
   };
-
-  // ================= NOVOS MÉTODOS PARA QR CODES =================
 
   /**
    * Busca QR codes resgatados
    */
   getQrCodesResgatados = async (req, res) => {
+    const startTime = Date.now();
+    const { id: usuarioId, email } = req.user;
+    const { limit = 50 } = req.query;
+
     try {
-      const usuarioId = req.user.id;
-      const { limit = 50 } = req.query;
-      const qrCodes = await this.service.getQrCodesResgatados(usuarioId, parseInt(limit));
-      res.json(qrCodes);
-    } catch (err) {
-      console.error('Erro ao buscar QR codes resgatados:', err);
-      res.status(400).json({ error: err.message });
+      console.log(`📊 [QrCodesResgatados] Iniciando para lojista: ${email} (limit: ${limit})`);
+
+      const qrCodes = await this.service.getQrCodesResgatados(usuarioId, Number(limit));
+
+      console.log(`✅ [QrCodesResgatados] Finalizado em ${Date.now() - startTime}ms`);
+
+      return res.status(200).json({
+        success: true,
+        data: qrCodes
+      });
+
+    } catch (error) {
+      console.error(`❌ [QrCodesResgatados] Erro:`, {
+        mensagem: error.message,
+        stack: error.stack,
+        tempo: `${Date.now() - startTime}ms`
+      });
+
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
     }
   };
 
@@ -84,14 +177,33 @@ class DashboardLojaController {
    * Busca QR codes validados
    */
   getQrCodesValidados = async (req, res) => {
+    const startTime = Date.now();
+    const { id: usuarioId, email } = req.user;
+    const { limit = 50 } = req.query;
+
     try {
-      const usuarioId = req.user.id;
-      const { limit = 50 } = req.query;
-      const qrCodes = await this.service.getQrCodesValidados(usuarioId, parseInt(limit));
-      res.json(qrCodes);
-    } catch (err) {
-      console.error('Erro ao buscar QR codes validados:', err);
-      res.status(400).json({ error: err.message });
+      console.log(`📊 [QrCodesValidados] Iniciando para lojista: ${email} (limit: ${limit})`);
+
+      const qrCodes = await this.service.getQrCodesValidados(usuarioId, Number(limit));
+
+      console.log(`✅ [QrCodesValidados] Finalizado em ${Date.now() - startTime}ms`);
+
+      return res.status(200).json({
+        success: true,
+        data: qrCodes
+      });
+
+    } catch (error) {
+      console.error(`❌ [QrCodesValidados] Erro:`, {
+        mensagem: error.message,
+        stack: error.stack,
+        tempo: `${Date.now() - startTime}ms`
+      });
+
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
     }
   };
 
@@ -99,13 +211,32 @@ class DashboardLojaController {
    * Busca estatísticas de validação de QR codes
    */
   getQrCodeStats = async (req, res) => {
+    const startTime = Date.now();
+    const { id: usuarioId, email } = req.user;
+
     try {
-      const usuarioId = req.user.id;
+      console.log(`📊 [QrCodeStats] Iniciando para lojista: ${email}`);
+
       const stats = await this.service.getQrCodeStats(usuarioId);
-      res.json(stats);
-    } catch (err) {
-      console.error('Erro ao buscar estatísticas de QR codes:', err);
-      res.status(400).json({ error: err.message });
+
+      console.log(`✅ [QrCodeStats] Finalizado em ${Date.now() - startTime}ms`);
+
+      return res.status(200).json({
+        success: true,
+        data: stats
+      });
+
+    } catch (error) {
+      console.error(`❌ [QrCodeStats] Erro:`, {
+        mensagem: error.message,
+        stack: error.stack,
+        tempo: `${Date.now() - startTime}ms`
+      });
+
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
     }
   };
 
@@ -113,23 +244,42 @@ class DashboardLojaController {
    * Busca QR codes com filtros avançados
    */
   getQrCodesWithFilters = async (req, res) => {
+    const startTime = Date.now();
+    const { id: usuarioId, email } = req.user;
+
     try {
-      const usuarioId = req.user.id;
       const filters = {
         status: req.query.status,
         dataInicio: req.query.dataInicio,
         dataFim: req.query.dataFim,
         clienteId: req.query.clienteId,
         cupomId: req.query.cupomId,
-        page: req.query.page ? parseInt(req.query.page) : 1,
-        limit: req.query.limit ? parseInt(req.query.limit) : 20
+        page: req.query.page ? Number(req.query.page) : 1,
+        limit: req.query.limit ? Number(req.query.limit) : 20
       };
-      
+
+      console.log(`📊 [QrCodesWithFilters] Iniciando para lojista: ${email}`, filters);
+
       const result = await this.service.getQrCodesWithFilters(usuarioId, filters);
-      res.json(result);
-    } catch (err) {
-      console.error('Erro ao buscar QR codes com filtros:', err);
-      res.status(400).json({ error: err.message });
+
+      console.log(`✅ [QrCodesWithFilters] Finalizado em ${Date.now() - startTime}ms`);
+
+      return res.status(200).json({
+        success: true,
+        data: result
+      });
+
+    } catch (error) {
+      console.error(`❌ [QrCodesWithFilters] Erro:`, {
+        mensagem: error.message,
+        stack: error.stack,
+        tempo: `${Date.now() - startTime}ms`
+      });
+
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
     }
   };
 
@@ -137,21 +287,38 @@ class DashboardLojaController {
    * Busca QR codes resgatados por período
    */
   getQrCodesResgatadosPorPeriodo = async (req, res) => {
+    const startTime = Date.now();
+    const { id: usuarioId, email } = req.user;
+    const { dataInicio, dataFim, limit = 50 } = req.query;
+
     try {
-      const usuarioId = req.user.id;
-      const { dataInicio, dataFim, limit = 50 } = req.query;
-      
+      console.log(`📊 [QrCodesResgatadosPorPeriodo] Iniciando para lojista: ${email}`);
+
       const qrCodes = await this.service.getQrCodesResgatadosPorPeriodo(
-        usuarioId, 
-        dataInicio ? new Date(dataInicio) : null, 
-        dataFim ? new Date(dataFim) : null, 
-        parseInt(limit)
+        usuarioId,
+        dataInicio ? new Date(dataInicio) : null,
+        dataFim ? new Date(dataFim) : null,
+        Number(limit)
       );
-      
-      res.json(qrCodes);
-    } catch (err) {
-      console.error('Erro ao buscar QR codes resgatados por período:', err);
-      res.status(400).json({ error: err.message });
+
+      console.log(`✅ [QrCodesResgatadosPorPeriodo] Finalizado em ${Date.now() - startTime}ms`);
+
+      return res.status(200).json({
+        success: true,
+        data: qrCodes
+      });
+
+    } catch (error) {
+      console.error(`❌ [QrCodesResgatadosPorPeriodo] Erro:`, {
+        mensagem: error.message,
+        stack: error.stack,
+        tempo: `${Date.now() - startTime}ms`
+      });
+
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
     }
   };
 
@@ -159,21 +326,38 @@ class DashboardLojaController {
    * Busca QR codes validados por período
    */
   getQrCodesValidadosPorPeriodo = async (req, res) => {
+    const startTime = Date.now();
+    const { id: usuarioId, email } = req.user;
+    const { dataInicio, dataFim, limit = 50 } = req.query;
+
     try {
-      const usuarioId = req.user.id;
-      const { dataInicio, dataFim, limit = 50 } = req.query;
-      
+      console.log(`📊 [QrCodesValidadosPorPeriodo] Iniciando para lojista: ${email}`);
+
       const qrCodes = await this.service.getQrCodesValidadosPorPeriodo(
-        usuarioId, 
-        dataInicio ? new Date(dataInicio) : null, 
-        dataFim ? new Date(dataFim) : null, 
-        parseInt(limit)
+        usuarioId,
+        dataInicio ? new Date(dataInicio) : null,
+        dataFim ? new Date(dataFim) : null,
+        Number(limit)
       );
-      
-      res.json(qrCodes);
-    } catch (err) {
-      console.error('Erro ao buscar QR codes validados por período:', err);
-      res.status(400).json({ error: err.message });
+
+      console.log(`✅ [QrCodesValidadosPorPeriodo] Finalizado em ${Date.now() - startTime}ms`);
+
+      return res.status(200).json({
+        success: true,
+        data: qrCodes
+      });
+
+    } catch (error) {
+      console.error(`❌ [QrCodesValidadosPorPeriodo] Erro:`, {
+        mensagem: error.message,
+        stack: error.stack,
+        tempo: `${Date.now() - startTime}ms`
+      });
+
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
     }
   };
 
@@ -181,13 +365,32 @@ class DashboardLojaController {
    * Calcula a taxa de validação da loja
    */
   getTaxaValidacao = async (req, res) => {
+    const startTime = Date.now();
+    const { id: usuarioId, email } = req.user;
+
     try {
-      const usuarioId = req.user.id;
+      console.log(`📊 [TaxaValidacao] Iniciando para lojista: ${email}`);
+
       const taxa = await this.service.getTaxaValidacao(usuarioId);
-      res.json({ taxa });
-    } catch (err) {
-      console.error('Erro ao calcular taxa de validação:', err);
-      res.status(400).json({ error: err.message });
+
+      console.log(`✅ [TaxaValidacao] Finalizado em ${Date.now() - startTime}ms`);
+
+      return res.status(200).json({
+        success: true,
+        data: { taxa }
+      });
+
+    } catch (error) {
+      console.error(`❌ [TaxaValidacao] Erro:`, {
+        mensagem: error.message,
+        stack: error.stack,
+        tempo: `${Date.now() - startTime}ms`
+      });
+
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
     }
   };
 
@@ -195,13 +398,32 @@ class DashboardLojaController {
    * Calcula o tempo médio de validação
    */
   getTempoMedioValidacao = async (req, res) => {
+    const startTime = Date.now();
+    const { id: usuarioId, email } = req.user;
+
     try {
-      const usuarioId = req.user.id;
+      console.log(`📊 [TempoMedioValidacao] Iniciando para lojista: ${email}`);
+
       const tempoMedio = await this.service.getTempoMedioValidacao(usuarioId);
-      res.json({ tempoMedio });
-    } catch (err) {
-      console.error('Erro ao calcular tempo médio de validação:', err);
-      res.status(400).json({ error: err.message });
+
+      console.log(`✅ [TempoMedioValidacao] Finalizado em ${Date.now() - startTime}ms`);
+
+      return res.status(200).json({
+        success: true,
+        data: { tempoMedio }
+      });
+
+    } catch (error) {
+      console.error(`❌ [TempoMedioValidacao] Erro:`, {
+        mensagem: error.message,
+        stack: error.stack,
+        tempo: `${Date.now() - startTime}ms`
+      });
+
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
     }
   };
 
@@ -209,14 +431,33 @@ class DashboardLojaController {
    * Busca resgates com status de validação
    */
   getResgatesComValidacao = async (req, res) => {
+    const startTime = Date.now();
+    const { id: usuarioId, email } = req.user;
+    const { limit = 10 } = req.query;
+
     try {
-      const usuarioId = req.user.id;
-      const { limit = 10 } = req.query;
-      const resgates = await this.service.getResgatesComValidacao(usuarioId, parseInt(limit));
-      res.json(resgates);
-    } catch (err) {
-      console.error('Erro ao buscar resgates com validação:', err);
-      res.status(400).json({ error: err.message });
+      console.log(`📊 [ResgatesComValidacao] Iniciando para lojista: ${email} (limit: ${limit})`);
+
+      const resgates = await this.service.getResgatesComValidacao(usuarioId, Number(limit));
+
+      console.log(`✅ [ResgatesComValidacao] Finalizado em ${Date.now() - startTime}ms`);
+
+      return res.status(200).json({
+        success: true,
+        data: resgates
+      });
+
+    } catch (error) {
+      console.error(`❌ [ResgatesComValidacao] Erro:`, {
+        mensagem: error.message,
+        stack: error.stack,
+        tempo: `${Date.now() - startTime}ms`
+      });
+
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
     }
   };
 
@@ -224,36 +465,34 @@ class DashboardLojaController {
    * Todos os dados do dashboard em uma única chamada
    */
   getDadosCompletos = async (req, res) => {
+    const startTime = Date.now();
+    const { id: usuarioId, email } = req.user;
+
     try {
-      const usuarioId = req.user.id;
+      console.log(`📊 [DadosCompletos] Iniciando para lojista: ${email}`);
+
       const dados = await this.service.getDadosCompletos(usuarioId);
-      res.json(dados);
-    } catch (err) {
-      console.error('Erro ao buscar dados completos:', err);
-      res.status(400).json({ error: err.message });
+
+      console.log(`✅ [DadosCompletos] Finalizado em ${Date.now() - startTime}ms`);
+
+      return res.status(200).json({
+        success: true,
+        data: dados
+      });
+
+    } catch (error) {
+      console.error(`❌ [DadosCompletos] Erro:`, {
+        mensagem: error.message,
+        stack: error.stack,
+        tempo: `${Date.now() - startTime}ms`
+      });
+
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
     }
   };
-
-  /**
- * Buscar dados completos de uma loja específica por ID (para admin)
- */
-getDadosCompletosPorLojaId = async (req, res) => {
-  try {
-    const { lojaId } = req.params;
-    
-    console.log(`🔍 Admin buscando dashboard da loja: ${lojaId}`);
-    
-    // 🔥 Reutiliza o service, mas adaptamos para receber lojaId
-    const dados = await this.service.getDadosCompletosPorLojaId(lojaId);
-    
-    res.json(dados);
-    
-  } catch (err) {
-    console.error('Erro ao buscar dashboard da loja:', err);
-    res.status(400).json({ error: err.message });
-  }
-};
-
 }
 
 module.exports = DashboardLojaController;

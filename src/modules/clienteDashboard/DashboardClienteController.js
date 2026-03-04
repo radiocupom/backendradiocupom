@@ -144,6 +144,29 @@ class DashboardClienteController {
       res.status(400).json({ error: err.message });
     }
   };
+  // Rota específica para economia (opcional)
+getEconomia = async (req, res) => {
+  try {
+    const clienteId = req.cliente.id;
+    
+    // 🔥 CORRIGIR: this.service, não this.repository
+    const [economiaTotal, economiaPorLoja] = await Promise.all([
+      this.service.getEconomiaTotal(clienteId),
+      this.service.getEconomiaPorLoja(clienteId)
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        total: economiaTotal,
+        porLoja: economiaPorLoja
+      }
+    });
+  } catch (err) {
+    console.error('Erro ao buscar economia:', err);
+    res.status(400).json({ error: err.message });
+  }
+};
 }
 
 module.exports = new DashboardClienteController();

@@ -1,6 +1,6 @@
-// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "windows"]
 }
 
 datasource db {
@@ -14,6 +14,15 @@ enum Role {
   loja
 }
 
+enum CategoriaLoja {
+  RESTAURANTE
+  SUPERMERCADO
+  PADARIA
+  LOJA_DE_ROUPAS
+  ELETRONICOS
+  OUTROS
+}
+
 model Usuario {
   id        String   @id @default(uuid()) @db.Uuid
   nome      String
@@ -25,16 +34,9 @@ model Usuario {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@index([email])
+  @@index([role])
   @@map("usuarios")
-}
-
-enum CategoriaLoja {
-  RESTAURANTE
-  SUPERMERCADO
-  PADARIA
-  LOJA_DE_ROUPAS
-  ELETRONICOS
-  OUTROS
 }
 
 model Loja {
@@ -52,6 +54,10 @@ model Loja {
   updatedAt   DateTime @updatedAt @map("updated_at")
   ultimoLogin DateTime? @map("ultimo_login")
 
+  @@index([payment])
+  @@index([categoria])
+  @@index([createdAt])
+  @@index([payment, categoria])
   @@map("lojas")
 }
 
@@ -80,6 +86,12 @@ model Cliente {
   updatedAt      DateTime  @updatedAt @map("updated_at")
   ultimoLogin    DateTime? @map("ultimo_login")
 
+  @@index([email])
+  @@index([whatsapp])
+  @@index([cidade, estado])
+  @@index([dataNascimento])
+  @@index([createdAt])
+  @@index([ativo])
   @@map("clientes")
 }
  
@@ -93,11 +105,10 @@ model Cupom {
   loja                 Loja          @relation(fields: [lojaId], references: [id])
   logo                 String
   
-  // 🔥 NOVOS CAMPOS DE PREÇO
-  precoOriginal        Float?        @map("preco_original")     // Preço original do produto/serviço
-  precoComDesconto     Float?        @map("preco_com_desconto") // Preço após aplicar o desconto
-  percentualDesconto   Int?          @map("percentual_desconto") // Percentual de desconto (opcional)
-  nomeProduto          String?       @map("nome_produto")       // Nome do produto específico (opcional)
+  precoOriginal        Float?        @map("preco_original")
+  precoComDesconto     Float?        @map("preco_com_desconto")
+  percentualDesconto   Int?          @map("percentual_desconto")
+  nomeProduto          String?       @map("nome_produto")
   
   totalQrCodes         Int           @default(1000) @map("total_qr_codes")
   qrCodesUsados        Int           @default(0) @map("qr_codes_usados")
@@ -106,6 +117,10 @@ model Cupom {
   createdAt            DateTime      @default(now()) @map("created_at")
   updatedAt            DateTime      @updatedAt @map("updated_at")
 
+  @@index([lojaId])
+  @@index([dataExpiracao])
+  @@index([lojaId, dataExpiracao])
+  @@index([precoComDesconto])
   @@map("cupons")
 }
 
@@ -116,23 +131,25 @@ model QrCodeUsado {
   codigo      String    @unique(map: "qrcodes_usados_codigo_unique")
   clienteId   String    @map("cliente_id") @db.Uuid
   cliente     Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  resgateId   String?   @map("resgate_id") @db.Uuid  // ← OPCIONAL (com ?)
+  resgate     Resgate?  @relation(fields: [resgateId], references: [id]) // ← OPCIONAL
   usadoEm     DateTime  @default(now()) @map("usado_em")
   validadoEm  DateTime? @map("validado_em")
   validado    Boolean   @default(false) @map("validado")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  @@index([cupomId], map: "qrcodes_usados_cupom_id_idx")
-  @@index([clienteId], map: "qrcodes_usados_cliente_id_idx")
-  @@index([usadoEm], map: "qrcodes_usados_usado_em_idx")
-  @@index([validado], map: "qrcodes_usados_validado_idx")
-  @@index([cupomId, validado], map: "qrcodes_usados_cupom_id_validado_idx")
-  @@index([clienteId, validado], map: "qrcodes_usados_cliente_id_validado_idx")
-  @@index([cupomId, clienteId], map: "qrcodes_usados_cupom_id_cliente_id_idx")
-  @@index([validadoEm], map: "qrcodes_usados_validado_em_idx")
-  @@index([createdAt], map: "qrcodes_usados_created_at_idx")
-  @@index([cupomId, clienteId, validado], map: "qrcodes_usados_cupom_id_cliente_id_validado_idx")
-
+  @@index([cupomId])
+  @@index([clienteId])
+  @@index([usadoEm])
+  @@index([validado])
+  @@index([cupomId, validado])
+  @@index([clienteId, validado])
+  @@index([cupomId, clienteId])
+  @@index([validadoEm])
+  @@index([createdAt])
+  @@index([cupomId, clienteId, validado])
+  @@index([resgateId]) // ← ÍNDICE OPCIONAL
   @@map("qrcodes_usados")
 }
 
@@ -144,9 +161,13 @@ model Resgate {
   cliente     Cliente  @relation(fields: [clienteId], references: [id])
   cupom       Cupom    @relation(fields: [cupomId], references: [id])
   resgatadoEm DateTime @default(now()) @map("resgatado_em")
+  qrCodes     QrCodeUsado[] // ← RELAÇÃO INVERSA
 
-  
-
-  @@unique([clienteId, cupomId])
+  @@index([clienteId, cupomId])
+  @@index([clienteId])
+  @@index([cupomId])
+  @@index([resgatadoEm])
+  @@index([clienteId, resgatadoEm])
+  @@index([cupomId, resgatadoEm])
   @@map("resgates")
 }

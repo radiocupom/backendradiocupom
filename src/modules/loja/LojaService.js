@@ -1,3 +1,4 @@
+// src/modules/loja/lojaService.js - VERSÃO OTIMIZADA
 const LojaRepository = require('./LojaRepository');
 const bcrypt = require('bcrypt');
 const { PrismaClient } = require('@prisma/client');
@@ -74,14 +75,13 @@ class LojaService {
     if (senhaLoja.length < 6) throw new Error('Senha da loja deve ter no mínimo 6 caracteres');
     if (senhaUsuario.length < 6) throw new Error('Senha do usuário deve ter no mínimo 6 caracteres');
 
-    const lojaExistente = await prisma.loja.findUnique({
-      where: { email: emailLoja }
-    });
-    if (lojaExistente) throw new Error('Email da loja já cadastrado');
+    // 🔥 Verificações em paralelo
+    const [lojaExistente, usuarioExistente] = await Promise.all([
+      prisma.loja.findUnique({ where: { email: emailLoja } }),
+      prisma.usuario.findUnique({ where: { email: emailUsuario } })
+    ]);
 
-    const usuarioExistente = await prisma.usuario.findUnique({
-      where: { email: emailUsuario }
-    });
+    if (lojaExistente) throw new Error('Email da loja já cadastrado');
     if (usuarioExistente) throw new Error('Email do usuário já cadastrado');
 
     const hashedSenhaLoja = await bcrypt.hash(senhaLoja, 10);
@@ -114,287 +114,145 @@ class LojaService {
 
       const usuarioAtualizado = await prismaTx.usuario.update({
         where: { id: usuario.id },
-        data: {
-          lojaId: loja.id
-        }
+        data: { lojaId: loja.id }
       });
 
-      return {
-        usuario: usuarioAtualizado,
-        loja
-      };
+      return { usuario: usuarioAtualizado, loja };
     });
 
     const { senha: senhaUsuarioRemovida, ...usuarioSemSenha } = resultado.usuario;
     const { senha: senhaLojaRemovida, ...lojaSemSenha } = resultado.loja;
 
-    return {
-      usuario: usuarioSemSenha,
-      loja: lojaSemSenha
-    };
+    return { usuario: usuarioSemSenha, loja: lojaSemSenha };
   }
 
   /**
    * Lista todas as lojas COM dados do usuário
    */
   async getAllLojas() {
-    const lojas = await prisma.loja.findMany({
-      include: {
-        usuario: {
-          select: {
-            id: true,
-            nome: true,
-            email: true,
-            role: true,
-            createdAt: true
-          }
-        }
-      }
-    });
-    
-    // Remove senhas das lojas
-    return lojas.map(({ senha, ...lojaSemSenha }) => lojaSemSenha);
+    const lojas = await this.repository.findAll();
+    return lojas;
   }
 
   /**
    * Busca loja por ID COM dados do usuário
    */
   async getLojaById(id) {
-    const loja = await prisma.loja.findUnique({
-      where: { id },
-      include: {
+    const loja = await this.repository.findById(id);
+    if (!loja) throw new Error('Loja não encontrada');
+    return loja;
+  }
+
+  /**
+   * Lojista atualiza sua própria loja e seus dados de usuário
+   */
+  async atualizarMinhaLoja(usuarioId, data) {
+    console.log('📤 Atualizando loja e usuário:', { usuarioId, data });
+    
+    // 🔥 Busca apenas o necessário
+    const loja = await prisma.loja.findFirst({
+      where: { usuario: { id: usuarioId } },
+      select: {
+        id: true,
         usuario: {
           select: {
             id: true,
-            nome: true,
-            email: true,
-            role: true,
-            createdAt: true
+            email: true
           }
         }
       }
     });
-
-    if (!loja) throw new Error('Loja não encontrada');
     
-    const { senha, ...lojaSemSenha } = loja;
-    return lojaSemSenha;
+    if (!loja) throw new Error('Loja não encontrada para este usuário');
+    
+    // Prepara dados para atualização
+    const lojaUpdateData = {};
+    const usuarioUpdateData = {};
+    
+    if (data.nomeLoja) lojaUpdateData.nome = data.nomeLoja;
+    if (data.categoria) lojaUpdateData.categoria = data.categoria;
+    if (data.descricao) lojaUpdateData.descricao = data.descricao;
+    if (data.logo) lojaUpdateData.logo = data.logo;
+    
+    if (data.nomeUsuario) usuarioUpdateData.nome = data.nomeUsuario;
+    if (data.emailUsuario && data.emailUsuario !== loja.usuario.email) {
+      const existingUser = await prisma.usuario.findFirst({
+        where: { 
+          email: data.emailUsuario,
+          NOT: { id: loja.usuario.id }
+        }
+      });
+      if (existingUser) throw new Error('Email de usuário já cadastrado');
+      usuarioUpdateData.email = data.emailUsuario;
+    }
+    
+    if (data.senhaUsuario) {
+      if (data.senhaUsuario.length < 6) {
+        throw new Error('A senha deve ter no mínimo 6 caracteres');
+      }
+      usuarioUpdateData.senha = await bcrypt.hash(data.senhaUsuario, 10);
+    }
+    
+    // Executa atualizações em transação
+    const resultado = await prisma.$transaction(async (prismaTx) => {
+      if (Object.keys(lojaUpdateData).length > 0) {
+        await prismaTx.loja.update({
+          where: { id: loja.id },
+          data: lojaUpdateData
+        });
+      }
+      
+      if (Object.keys(usuarioUpdateData).length > 0) {
+        await prismaTx.usuario.update({
+          where: { id: loja.usuario.id },
+          data: usuarioUpdateData
+        });
+      }
+    });
+    
+    // Retorna dados atualizados
+    return this.getLojaById(loja.id);
   }
 
   /**
-   * Busca loja com dados do usuário associado (mantido para compatibilidade)
+   * Atualiza loja
    */
-  async getLojaComUsuario(id) {
+  async updateLoja(id, data) {
+    const loja = await this.repository.findById(id);
+    if (!loja) throw new Error('Loja não encontrada');
+
+    if (data.email && data.email !== loja.email) {
+      const existing = await this.repository.findByEmail(data.email);
+      if (existing) throw new Error('Email já cadastrado');
+    }
+
+    if (data.senha) {
+      if (data.senha.length < 6) {
+        throw new Error('A senha deve ter no mínimo 6 caracteres');
+      }
+      data.senha = await bcrypt.hash(data.senha, 10);
+    }
+
+    const updateData = {
+      nome: data.nome ?? loja.nome,
+      email: data.email ?? loja.email,
+      senha: data.senha ?? loja.senha,
+      logo: data.logo ?? loja.logo,
+      categoria: data.categoria ?? loja.categoria,
+      descricao: data.descricao ?? loja.descricao
+    };
+
+    if (data.payment !== undefined) {
+      updateData.payment = typeof data.payment === 'string' 
+        ? data.payment === 'true' 
+        : data.payment;
+    }
+
+    await this.repository.update(id, updateData);
+    
+    // Retorna dados completos
     return this.getLojaById(id);
   }
-
- /**
- * Lojista atualiza sua própria loja e seus dados de usuário
- */
-async atualizarMinhaLoja(usuarioId, data) {
-  console.log('📤 Atualizando loja e usuário:', { usuarioId, data });
-  
-  // Busca a loja associada ao usuário
-  const loja = await prisma.loja.findFirst({
-    where: { 
-      usuario: {
-        id: usuarioId
-      }
-    },
-    include: {
-      usuario: true
-    }
-  });
-  
-  if (!loja) {
-    throw new Error('Loja não encontrada para este usuário');
-  }
-  
-  console.log('🏪 Loja encontrada:', loja.id);
-  console.log('👤 Usuário associado:', loja.usuario.id);
-  
-  // Prepara dados para atualização da loja
-  const lojaUpdateData = {};
-  const usuarioUpdateData = {};
-  
-  // Dados da loja
-  if (data.nomeLoja) lojaUpdateData.nome = data.nomeLoja;
-  if (data.categoria) lojaUpdateData.categoria = data.categoria;
-  if (data.descricao) lojaUpdateData.descricao = data.descricao;
-  if (data.logo) lojaUpdateData.logo = data.logo;
-  
-  // Dados do usuário
-  if (data.nomeUsuario) usuarioUpdateData.nome = data.nomeUsuario;
-  if (data.emailUsuario) {
-    // Verifica se o email já existe
-    const existingUser = await prisma.usuario.findFirst({
-      where: { 
-        email: data.emailUsuario,
-        NOT: { id: loja.usuario.id }
-      }
-    });
-    if (existingUser) throw new Error('Email de usuário já cadastrado');
-    usuarioUpdateData.email = data.emailUsuario;
-  }
-  
-  if (data.senhaUsuario) {
-    if (data.senhaUsuario.length < 6) {
-      throw new Error('A senha deve ter no mínimo 6 caracteres');
-    }
-    usuarioUpdateData.senha = await bcrypt.hash(data.senhaUsuario, 10);
-  }
-  
-  console.log('📦 lojaUpdateData:', lojaUpdateData);
-  console.log('📦 usuarioUpdateData:', usuarioUpdateData);
-  
-  // Executa as atualizações em transação
-  const resultado = await prisma.$transaction(async (prismaTx) => {
-    // Atualiza loja se houver dados
-    let lojaAtualizada = loja;
-    if (Object.keys(lojaUpdateData).length > 0) {
-      lojaAtualizada = await prismaTx.loja.update({
-        where: { id: loja.id },
-        data: lojaUpdateData
-      });
-    }
-    
-    // Atualiza usuário se houver dados
-    let usuarioAtualizado = loja.usuario;
-    if (Object.keys(usuarioUpdateData).length > 0) {
-      usuarioAtualizado = await prismaTx.usuario.update({
-        where: { id: loja.usuario.id },
-        data: usuarioUpdateData
-      });
-    }
-    
-    return {
-      loja: lojaAtualizada,
-      usuario: usuarioAtualizado
-    };
-  });
-  
-  // Busca os dados completos para retornar
-  const lojaCompleta = await prisma.loja.findUnique({
-    where: { id: loja.id },
-    include: {
-      usuario: {
-        select: {
-          id: true,
-          nome: true,
-          email: true,
-          role: true,
-          createdAt: true
-        }
-      }
-    }
-  });
-  
-  // Remove a senha
-  const { senha, ...lojaSemSenha } = lojaCompleta;
-  
-  return lojaSemSenha;
-}
-
-/**
- * Atualiza loja
- */
-async updateLoja(id, data) {
-  const loja = await prisma.loja.findUnique({
-    where: { id }
-  });
-  
-  if (!loja) throw new Error('Loja não encontrada');
-
-  if (data.email && data.email !== loja.email) {
-    const existing = await this.repository.findByEmail(data.email);
-    if (existing) throw new Error('Email já cadastrado');
-  }
-
-  if (data.senha) {
-    if (data.senha.length < 6) {
-      throw new Error('A senha deve ter no mínimo 6 caracteres');
-    }
-    data.senha = await bcrypt.hash(data.senha, 10);
-  }
-
-  // 🔥 CORREÇÃO: usar o nome do campo como no Prisma (payment)
-  const updateData = {
-    nome: data.nome ?? loja.nome,
-    email: data.email ?? loja.email,
-    senha: data.senha ?? loja.senha,
-    logo: data.logo ?? loja.logo,
-    categoria: data.categoria ?? loja.categoria,
-    descricao: data.descricao ?? loja.descricao
-  };
-
-  // 🔥 Usar 'payment', não 'payment_status' (o Prisma faz o map automático)
-  if (data.payment !== undefined) {
-    // Converter string para booleano se necessário
-    if (typeof data.payment === 'string') {
-      updateData.payment = data.payment === 'true';
-    } else {
-      updateData.payment = data.payment;
-    }
-  }
-
-  console.log('📦 updateData enviado para o banco:', updateData);
-
-  const lojaAtualizada = await this.repository.update(id, updateData);
-  
-  // Buscar a loja atualizada com os dados do usuário
-  return this.getLojaById(id);
-
-}
-
-/**
- * Atualiza loja
- */
-async updateLoja(id, data) {
-  const loja = await prisma.loja.findUnique({
-    where: { id }
-  });
-  
-  if (!loja) throw new Error('Loja não encontrada');
-
-  if (data.email && data.email !== loja.email) {
-    const existing = await this.repository.findByEmail(data.email);
-    if (existing) throw new Error('Email já cadastrado');
-  }
-
-  if (data.senha) {
-    if (data.senha.length < 6) {
-      throw new Error('A senha deve ter no mínimo 6 caracteres');
-    }
-    data.senha = await bcrypt.hash(data.senha, 10);
-  }
-
-  // 🔥 CORREÇÃO DEFINITIVA: usar APENAS 'payment' (nome do campo no schema)
-  const updateData = {
-    nome: data.nome ?? loja.nome,
-    email: data.email ?? loja.email,
-    senha: data.senha ?? loja.senha,
-    logo: data.logo ?? loja.logo,
-    categoria: data.categoria ?? loja.categoria,
-    descricao: data.descricao ?? loja.descricao
-  };
-
-  // 🔥 Usar 'payment' - NUNCA usar 'payment_status' no código
-  if (data.payment !== undefined) {
-    // Converter string para booleano se necessário
-    if (typeof data.payment === 'string') {
-      updateData.payment = data.payment === 'true';
-    } else {
-      updateData.payment = data.payment;
-    }
-  }
-
-  console.log('📦 updateData enviado para o banco:', updateData);
-
-  const lojaAtualizada = await this.repository.update(id, updateData);
-  
-  // Buscar a loja atualizada com os dados do usuário
-  return this.getLojaById(id);
-}
 
   /**
    * Ativa/desativa pagamento da loja
@@ -404,8 +262,6 @@ async updateLoja(id, data) {
     if (!loja) throw new Error('Loja não encontrada');
 
     await this.repository.update(id, { payment: status });
-    
-    // Retorna a loja com dados do usuário
     return this.getLojaById(id);
   }
 
@@ -416,16 +272,17 @@ async updateLoja(id, data) {
     const loja = await this.repository.findById(id);
     if (!loja) throw new Error('Loja não encontrada');
 
+    // 🔥 Verifica cupons de forma eficiente
     const lojaComCupons = await prisma.loja.findUnique({
       where: { id },
-      include: {
-        cupons: {
-          select: { id: true }
+      select: {
+        _count: {
+          select: { cupons: true }
         }
       }
     });
 
-    if (lojaComCupons?.cupons.length > 0) {
+    if (lojaComCupons?._count.cupons > 0) {
       throw new Error('Não é possível deletar loja com cupons cadastrados');
     }
 
@@ -434,23 +291,22 @@ async updateLoja(id, data) {
   }
 
   /**
-   * Busca estatísticas da loja
+   * Busca estatísticas da loja - VERSÃO OTIMIZADA
    */
   async getEstatisticas(id) {
     const loja = await prisma.loja.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        nome: true,
         _count: {
-          select: {
-            cupons: true
-          }
+          select: { cupons: true }
         },
         cupons: {
           select: {
             _count: {
               select: {
-                resgates: true,
-                qrCodes: true
+                resgates: true
               }
             },
             resgates: {
@@ -469,9 +325,6 @@ async updateLoja(id, data) {
     const totalResgates = loja.cupons.reduce((acc, cupom) => 
       acc + cupom.resgates.reduce((sum, r) => sum + r.quantidade, 0), 0
     );
-    const totalQrCodes = loja.cupons.reduce((acc, cupom) => 
-      acc + cupom._count.qrCodes, 0
-    );
 
     return {
       lojaId: loja.id,
@@ -479,8 +332,9 @@ async updateLoja(id, data) {
       estatisticas: {
         totalCupons,
         totalResgates,
-        totalQrCodes,
-        mediaResgatesPorCupom: totalCupons > 0 ? (totalResgates / totalCupons).toFixed(2) : 0
+        mediaResgatesPorCupom: totalCupons > 0 
+          ? Number((totalResgates / totalCupons).toFixed(2)) 
+          : 0
       }
     };
   }

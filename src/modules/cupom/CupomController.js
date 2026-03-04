@@ -136,14 +136,21 @@ class CupomController {
   };
 
   delete = async (req, res) => {
-    try {
-      const { id } = req.params;
-      await this.service.deleteCupom(id, req.user);
-      res.status(204).send();
-    } catch (err) {
-      res.status(400).json({ error: err.message });
-    }
-  };
+  try {
+    const { id } = req.params;
+    console.log('🗑️ [DELETE] Recebido ID:', id);
+    console.log('👤 [DELETE] Usuário:', req.user?.id, req.user?.role);
+    
+    await this.service.deleteCupom(id, req.user);
+    console.log('✅ [DELETE] Cupom deletado com sucesso');
+    res.status(204).send();
+  } catch (err) {
+    console.error('❌ [DELETE] Erro detalhado:', err);
+    console.error('❌ [DELETE] Mensagem:', err.message);
+    console.error('❌ [DELETE] Stack:', err.stack);
+    res.status(400).json({ error: err.message });
+  }
+};
 
   gerarQrCodes = async (req, res) => {
     try {

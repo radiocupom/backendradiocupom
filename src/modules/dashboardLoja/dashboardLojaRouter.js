@@ -6,6 +6,8 @@ const DashboardLojaController = require('./DashboardLojaController');
 
 const controller = new DashboardLojaController();
 
+// ================= ROTAS DO LOJISTA =================
+
 /**
  * @route   GET /api/dashboard-loja/kpis
  * @desc    KPIs principais da loja
@@ -19,7 +21,7 @@ router.get('/kpis',
 
 /**
  * @route   GET /api/dashboard-loja/ultimos-resgates
- * @desc    Últimos resgates da loja
+ * @desc    Últimos resgates da loja com status de validação
  * @access  Private (loja)
  */
 router.get('/ultimos-resgates',
@@ -50,13 +52,12 @@ router.get('/resgates-por-dia',
   controller.getResgatesPorDia
 );
 
-// ================= NOVAS ROTAS PARA QR CODES =================
+// ================= ROTAS DE QR CODES =================
 
 /**
  * @route   GET /api/dashboard-loja/qrcodes/resgatados
  * @desc    Busca QR codes resgatados
  * @access  Private (loja)
- * @query   {number} limit - Limite de resultados (default: 50)
  */
 router.get('/qrcodes/resgatados',
   authenticateToken,
@@ -68,7 +69,6 @@ router.get('/qrcodes/resgatados',
  * @route   GET /api/dashboard-loja/qrcodes/validados
  * @desc    Busca QR codes validados
  * @access  Private (loja)
- * @query   {number} limit - Limite de resultados (default: 50)
  */
 router.get('/qrcodes/validados',
   authenticateToken,
@@ -91,13 +91,6 @@ router.get('/qrcodes/stats',
  * @route   GET /api/dashboard-loja/qrcodes/filters
  * @desc    Busca QR codes com filtros avançados
  * @access  Private (loja)
- * @query   {string} status - Filtrar por status (validado/pendente)
- * @query   {string} dataInicio - Data inicial (YYYY-MM-DD)
- * @query   {string} dataFim - Data final (YYYY-MM-DD)
- * @query   {string} clienteId - ID do cliente
- * @query   {string} cupomId - ID do cupom
- * @query   {number} page - Número da página (default: 1)
- * @query   {number} limit - Itens por página (default: 20)
  */
 router.get('/qrcodes/filters',
   authenticateToken,
@@ -109,9 +102,6 @@ router.get('/qrcodes/filters',
  * @route   GET /api/dashboard-loja/qrcodes/resgatados/periodo
  * @desc    Busca QR codes resgatados por período
  * @access  Private (loja)
- * @query   {string} dataInicio - Data inicial (YYYY-MM-DD)
- * @query   {string} dataFim - Data final (YYYY-MM-DD)
- * @query   {number} limit - Limite de resultados (default: 50)
  */
 router.get('/qrcodes/resgatados/periodo',
   authenticateToken,
@@ -123,9 +113,6 @@ router.get('/qrcodes/resgatados/periodo',
  * @route   GET /api/dashboard-loja/qrcodes/validados/periodo
  * @desc    Busca QR codes validados por período
  * @access  Private (loja)
- * @query   {string} dataInicio - Data inicial (YYYY-MM-DD)
- * @query   {string} dataFim - Data final (YYYY-MM-DD)
- * @query   {number} limit - Limite de resultados (default: 50)
  */
 router.get('/qrcodes/validados/periodo',
   authenticateToken,
@@ -159,7 +146,6 @@ router.get('/qrcodes/tempo-medio-validacao',
  * @route   GET /api/dashboard-loja/resgates/com-validacao
  * @desc    Busca resgates com status de validação
  * @access  Private (loja)
- * @query   {number} limit - Limite de resultados (default: 10)
  */
 router.get('/resgates/com-validacao',
   authenticateToken,
@@ -176,17 +162,6 @@ router.get('/dados-completos',
   authenticateToken,
   authorizeRoles('loja'),
   controller.getDadosCompletos
-);
-
-/**
- * @route   GET /api/dashboard-loja/admin/:lojaId/dados-completos
- * @desc    Todos os dados do dashboard de uma loja específica (para admin/superadmin)
- * @access  Private (admin/superadmin)
- */
-router.get('/admin/:lojaId/dados-completos',
-  authenticateToken,
-  authorizeRoles('admin', 'superadmin'),
-  controller.getDadosCompletosPorLojaId
 );
 
 module.exports = router;

@@ -5,9 +5,23 @@ class CupomRepository {
     return prisma.cupom.create({ data });
   }
 
+  // 🔥 VERSÃO OTIMIZADA
   findAll() {
     return prisma.cupom.findMany({
-      include: {
+      select: {
+        id: true,
+        codigo: true,
+        descricao: true,
+        quantidadePorCliente: true,
+        dataExpiracao: true,
+        logo: true,
+        precoOriginal: true,
+        precoComDesconto: true,
+        percentualDesconto: true,
+        nomeProduto: true,
+        totalQrCodes: true,
+        qrCodesUsados: true,
+        createdAt: true,
         loja: {
           select: {
             id: true,
@@ -24,10 +38,24 @@ class CupomRepository {
     });
   }
 
+  // 🔥 VERSÃO OTIMIZADA
   findById(id) {
     return prisma.cupom.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        codigo: true,
+        descricao: true,
+        quantidadePorCliente: true,
+        dataExpiracao: true,
+        logo: true,
+        precoOriginal: true,
+        precoComDesconto: true,
+        percentualDesconto: true,
+        nomeProduto: true,
+        totalQrCodes: true,
+        qrCodesUsados: true,
+        createdAt: true,
         loja: {
           select: {
             id: true,
@@ -43,10 +71,24 @@ class CupomRepository {
     });
   }
 
+  // 🔥 VERSÃO OTIMIZADA
   findByLoja(lojaId) {
     return prisma.cupom.findMany({
       where: { lojaId },
-      include: {
+      select: {
+        id: true,
+        codigo: true,
+        descricao: true,
+        quantidadePorCliente: true,
+        dataExpiracao: true,
+        logo: true,
+        precoOriginal: true,
+        precoComDesconto: true,
+        percentualDesconto: true,
+        nomeProduto: true,
+        totalQrCodes: true,
+        qrCodesUsados: true,
+        createdAt: true,
         _count: {
           select: { resgates: true }
         }
@@ -72,17 +114,30 @@ class CupomRepository {
     return prisma.cupom.delete({ where: { id } });
   }
 
+  // 🔥 VERSÃO OTIMIZADA
   findDisponiveis() {
+    const agora = new Date();
+    
     return prisma.cupom.findMany({
       where: {
         dataExpiracao: {
-          gt: new Date()
+          gt: agora
         },
         loja: {
           payment: true
         }
       },
-      include: {
+      select: {
+        id: true,
+        codigo: true,
+        descricao: true,
+        quantidadePorCliente: true,
+        dataExpiracao: true,
+        logo: true,
+        precoOriginal: true,
+        precoComDesconto: true,
+        percentualDesconto: true,
+        nomeProduto: true,
         loja: {
           select: {
             id: true,

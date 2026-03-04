@@ -32,4 +32,11 @@ router.delete('/:id', authenticateToken, authorizeRoles('superadmin', 'admin'), 
 router.get('/loja/:lojaId/clientes', authenticateToken, authorizeRoles('loja', 'admin', 'superadmin'), controller.getClientesByLoja);
 router.get('/loja/:lojaId/cliente/:clienteId', authenticateToken, authorizeRoles('loja', 'admin', 'superadmin'), controller.getClienteByLoja);
 
+// 🔥 NOVA ROTA: Buscar QR codes de um resgate específico do cliente
+router.get('/loja/:lojaId/cliente/:clienteId/resgate/:resgateId/qrcodes', 
+  authenticateToken, 
+  authorizeRoles('loja', 'admin', 'superadmin'), 
+  controller.getQrCodesPorResgate
+);
+
 module.exports = router;

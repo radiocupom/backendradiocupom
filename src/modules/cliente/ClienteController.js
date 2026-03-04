@@ -196,18 +196,36 @@ create = async (req, res) => {
     }
   };
 
-  getClientesByLoja = async (req, res) => {
-    try {
-      const { lojaId } = req.params;
-      const clientes = await this.service.getClientesByLoja(lojaId, {
-        userId: req.user?.id,
-        userRole: req.user?.role
-      });
-      res.json(clientes);
-    } catch (err) {
-      res.status(400).json({ error: err.message });
+ getClientesByLoja = async (req, res) => {
+  try {
+    console.log('📥 [getClientesByLoja] Requisição recebida');
+    console.log('📥 [getClientesByLoja] Params:', req.params);
+    console.log('📥 [getClientesByLoja] lojaId:', req.params.lojaId);
+    console.log('📥 [getClientesByLoja] Usuário:', req.user?.id, req.user?.role);
+    
+    const { lojaId } = req.params;
+    
+    // 🔥 VALIDAÇÃO - UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(lojaId)) {
+      console.error('❌ [getClientesByLoja] lojaId inválido:', lojaId);
+      return res.status(400).json({ error: 'ID da loja inválido' });
     }
-  };
+
+    const clientes = await this.service.getClientesByLoja(lojaId, {
+      userId: req.user?.id,
+      userRole: req.user?.role
+    });
+    
+    console.log('✅ [getClientesByLoja] Clientes encontrados:', clientes?.length || 0);
+    res.json(clientes);
+    
+  } catch (err) {
+    console.error('❌ [getClientesByLoja] Erro:', err.message);
+    console.error('❌ [getClientesByLoja] Stack:', err.stack);
+    res.status(400).json({ error: err.message });
+  }
+};
 
   /**
  * Buscar um cliente específico da loja
@@ -226,6 +244,70 @@ getClienteByLoja = async (req, res) => {
   } catch (err) {
     console.error('Erro ao buscar cliente da loja:', err);
     res.status(400).json({ error: err.message });
+  }
+};
+
+// NOVO MÉTODO no ClienteController.js
+getQrCodesPorResgate = async (req, res) => {
+  try {
+    const { lojaId, clienteId, resgateId } = req.params;
+    
+    console.log('🔍 [Controller] getQrCodesPorResgate - Params recebidos:', { 
+      lojaId, 
+      clienteId, 
+      resgateId,
+      usuarioId: req.user.id,
+      usuarioRole: req.user.role
+    });
+    
+    // Validar UUIDs
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    
+    if (!uuidRegex.test(lojaId)) {
+      console.error('❌ [Controller] lojaId inválido:', lojaId);
+      return res.status(400).json({ 
+        success: false, 
+        error: 'ID da loja inválido' 
+      });
+    }
+    
+    if (!uuidRegex.test(clienteId)) {
+      console.error('❌ [Controller] clienteId inválido:', clienteId);
+      return res.status(400).json({ 
+        success: false, 
+        error: 'ID do cliente inválido' 
+      });
+    }
+    
+    if (!uuidRegex.test(resgateId)) {
+      console.error('❌ [Controller] resgateId inválido:', resgateId);
+      return res.status(400).json({ 
+        success: false, 
+        error: 'ID do resgate inválido' 
+      });
+    }
+    
+    const qrCodes = await this.service.getQrCodesPorResgate(lojaId, clienteId, resgateId, {
+      userId: req.user.id,
+      userRole: req.user.role
+    });
+    
+    console.log(`✅ [Controller] Encontrados ${qrCodes.length} QR codes`);
+    
+    res.json({
+      success: true,
+      data: qrCodes
+    });
+    
+  } catch (err) {
+    console.error('❌ [Controller] Erro ao buscar QR codes do resgate:', {
+      message: err.message,
+      stack: err.stack
+    });
+    res.status(400).json({ 
+      success: false, 
+      error: err.message 
+    });
   }
 };
 

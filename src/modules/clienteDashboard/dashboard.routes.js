@@ -9,6 +9,7 @@ router.use(authenticateCliente);
 
 // ================= DASHBOARD DO CLIENTE =================
 router.get('/resumo', DashboardClienteController.getResumo);
+router.get('/economia', DashboardClienteController.getEconomia);
 router.get('/resgates', DashboardClienteController.getResgates);
 router.get('/resgates/:id', DashboardClienteController.getResgateById);
 router.get('/qrcodes', DashboardClienteController.getQrCodes);

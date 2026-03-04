@@ -66,7 +66,7 @@ router.put('/:id',
 // Deletar (apenas superadmin/admin)
 router.delete('/:id',
   authenticateToken,
-  authorizeRoles('superadmin', 'admin'),
+  authorizeRoles('superadmin', 'admin', 'loja'),
   controller.delete
 );
 
