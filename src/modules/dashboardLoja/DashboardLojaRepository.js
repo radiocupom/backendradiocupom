@@ -524,6 +524,34 @@ async findQrCodesComTempoValidacao(lojaId, limit = 1000) {
       resgatesPorDia
     };
   }
+
+  /**
+ * Busca resgates que possuem PELO MENOS UM QR code validado
+ * Usado para cálculos financeiros precisos
+ */
+async findResgatesComQRValidados(lojaId) {
+  return prisma.resgate.findMany({
+    where: {
+      cupom: { lojaId },
+      qrCodes: {
+        some: { validado: true } // Pelo menos um QR code validado
+      }
+    },
+    include: {
+      cupom: {
+        select: {
+          precoOriginal: true,
+          precoComDesconto: true
+        }
+      },
+      qrCodes: {
+        where: { validado: true },
+        select: { validado: true }
+      }
+    }
+  });
+}
+
 }
 
 module.exports = DashboardLojaRepository;

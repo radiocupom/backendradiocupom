@@ -104,6 +104,7 @@ model Cupom {
   lojaId               String        @map("loja_id") @db.Uuid
   loja                 Loja          @relation(fields: [lojaId], references: [id])
   logo                 String
+  ativo                Boolean       @default(true) @map("ativo")
   
   precoOriginal        Float?        @map("preco_original")
   precoComDesconto     Float?        @map("preco_com_desconto")
@@ -112,8 +113,11 @@ model Cupom {
   
   totalQrCodes         Int           @default(1000) @map("total_qr_codes")
   qrCodesUsados        Int           @default(0) @map("qr_codes_usados")
-  resgates             Resgate[]
+  
+  // Relacionamentos (SEM CASCADE AQUI!)
+  resgates             Resgate[]     
   qrCodesUsadosList    QrCodeUsado[]
+  
   createdAt            DateTime      @default(now()) @map("created_at")
   updatedAt            DateTime      @updatedAt @map("updated_at")
 
@@ -131,8 +135,8 @@ model QrCodeUsado {
   codigo      String    @unique(map: "qrcodes_usados_codigo_unique")
   clienteId   String    @map("cliente_id") @db.Uuid
   cliente     Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  resgateId   String?   @map("resgate_id") @db.Uuid  // ← OPCIONAL (com ?)
-  resgate     Resgate?  @relation(fields: [resgateId], references: [id]) // ← OPCIONAL
+  resgateId   String?   @map("resgate_id") @db.Uuid
+  resgate     Resgate?  @relation(fields: [resgateId], references: [id])
   usadoEm     DateTime  @default(now()) @map("usado_em")
   validadoEm  DateTime? @map("validado_em")
   validado    Boolean   @default(false) @map("validado")
@@ -149,7 +153,7 @@ model QrCodeUsado {
   @@index([validadoEm])
   @@index([createdAt])
   @@index([cupomId, clienteId, validado])
-  @@index([resgateId]) // ← ÍNDICE OPCIONAL
+  @@index([resgateId])
   @@map("qrcodes_usados")
 }
 
@@ -159,9 +163,9 @@ model Resgate {
   cupomId     String   @map("cupom_id") @db.Uuid
   quantidade  Int      @default(1)
   cliente     Cliente  @relation(fields: [clienteId], references: [id])
-  cupom       Cupom    @relation(fields: [cupomId], references: [id])
+  cupom       Cupom    @relation(fields: [cupomId], references: [id], onDelete: Cascade)  // ← CASCADE AQUI!
   resgatadoEm DateTime @default(now()) @map("resgatado_em")
-  qrCodes     QrCodeUsado[] // ← RELAÇÃO INVERSA
+  qrCodes     QrCodeUsado[]
 
   @@index([clienteId, cupomId])
   @@index([clienteId])

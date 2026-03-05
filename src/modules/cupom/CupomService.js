@@ -1,13 +1,16 @@
 const CupomRepository = require('./CupomRepository');
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
 
 class CupomService {
   constructor() {
     this.repository = new CupomRepository();
   }
 
+  /**
+   * Criar novo cupom
+   */
   async createCupom(data, usuarioLogado) {
+    console.log('📝 [SERVICE] createCupom - INÍCIO:', { data, usuarioId: usuarioLogado.id });
+
     const { 
       codigo, 
       descricao, 
@@ -22,6 +25,7 @@ class CupomService {
       nomeProduto
     } = data;
 
+    // Validações básicas
     if (!codigo || !descricao || !quantidadePorCliente || !dataExpiracao || !lojaId) {
       throw new Error('Todos os campos são obrigatórios');
     }
@@ -35,6 +39,7 @@ class CupomService {
       throw new Error('Data de expiração deve ser futura');
     }
 
+    // Validações de preço
     if (precoOriginal && precoOriginal <= 0) {
       throw new Error('Preço original deve ser maior que zero');
     }
@@ -45,74 +50,76 @@ class CupomService {
       throw new Error('Percentual de desconto deve estar entre 0 e 100');
     }
 
+    // Validação para lojista (USA REPOSITORY)
     if (usuarioLogado.role === 'loja') {
-      const usuario = await prisma.usuario.findUnique({
-        where: { id: usuarioLogado.id },
-        select: { loja: { select: { id: true } } }
-      });
-
-      if (!usuario?.loja) {
+      const lojaDoUsuario = await this.repository.findLojaByUsuarioId(usuarioLogado.id);
+      
+      if (!lojaDoUsuario) {
         throw new Error('Você não possui uma loja associada ao seu usuário');
       }
 
-      if (usuario.loja.id !== lojaId) {
+      if (lojaDoUsuario.id !== lojaId) {
         throw new Error('Você só pode criar cupons para sua própria loja');
       }
     }
 
-    const loja = await prisma.loja.findUnique({
-      where: { id: lojaId }
-    });
-
+    // Verificar se loja existe (USA REPOSITORY)
+    const loja = await this.repository.findLojaById(lojaId);
     if (!loja) {
       throw new Error('Loja não encontrada');
     }
 
+    // Verificar código único (USA REPOSITORY)
     const existing = await this.repository.findByCodigo(codigo);
     if (existing) {
       throw new Error('Código de cupom já existe');
     }
 
-    const novoCupom = await prisma.cupom.create({
-      data: {
-        codigo,
-        descricao,
-        quantidadePorCliente,
-        dataExpiracao: dataExp,
-        loja: {
-          connect: { id: lojaId }
-        },
-        logo: logo || '',
-        totalQrCodes: parseInt(quantidadeQrCodes),
-        qrCodesUsados: 0,
-        precoOriginal,
-        precoComDesconto,
-        percentualDesconto,
-        nomeProduto
-      }
+    // Criar cupom (USA REPOSITORY)
+    const novoCupom = await this.repository.create({
+      codigo,
+      descricao,
+      quantidadePorCliente,
+      dataExpiracao: dataExp,
+      lojaId,
+      logo: logo || '',
+      totalQrCodes: parseInt(quantidadeQrCodes),
+      qrCodesUsados: 0,
+      precoOriginal,
+      precoComDesconto,
+      percentualDesconto,
+      nomeProduto,
+      ativo: true
     });
 
+    console.log('✅ [SERVICE] Cupom criado:', novoCupom.id);
     return novoCupom;
   }
 
-  // 🔥 Usando repositório otimizado
+  /**
+   * Listar todos os cupons (admin/superadmin)
+   */
   async getAllCupons() {
     return this.repository.findAll();
   }
 
-  // 🔥 Usando repositório otimizado
+  /**
+   * Buscar cupom por ID com verificação de permissão
+   */
   async getCupomById(id, usuarioLogado = null) {
     const cupom = await this.repository.findById(id);
     
     if (!cupom) throw new Error('Cupom não encontrado');
     
+    // Verificar permissão para lojista (USA REPOSITORY)
     if (usuarioLogado?.role === 'loja') {
-      const usuario = await prisma.usuario.findUnique({
-        where: { id: usuarioLogado.id },
-        select: { loja: { select: { id: true } } }
-      });
+      const lojaDoUsuario = await this.repository.findLojaByUsuarioId(usuarioLogado.id);
       
-      if (cupom.lojaId !== usuario?.loja?.id) {
+      if (!lojaDoUsuario) {
+        throw new Error('Loja não encontrada para este usuário');
+      }
+
+      if (cupom.lojaId !== lojaDoUsuario.id) {
         throw new Error('Você só pode acessar cupons da sua própria loja');
       }
     }
@@ -120,314 +127,344 @@ class CupomService {
     return cupom;
   }
 
-  // 🔥 Usando repositório otimizado
+  /**
+   * Buscar cupons por loja
+   */
   async getCuponsByLoja(lojaId) {
     return this.repository.findByLoja(lojaId);
   }
 
-  // 🔥 Usando repositório otimizado
+  /**
+   * Buscar cupons disponíveis (público)
+   */
   async getCuponsDisponiveis() {
     return this.repository.findDisponiveis();
   }
 
-  async updateCupom(id, data, usuarioLogado = null) {
-    console.log('🔄 [service] Atualizando cupom:', id);
-    console.log('📦 [service] Dados recebidos:', data);
-    
-    const cupom = await prisma.cupom.findUnique({
-      where: { id }
-    });
-    
-    if (!cupom) throw new Error('Cupom não encontrado');
-    console.log('✅ [service] Cupom encontrado:', cupom.codigo);
-
-    if (usuarioLogado?.role === 'loja') {
-      const usuario = await prisma.usuario.findUnique({
-        where: { id: usuarioLogado.id },
-        select: { loja: { select: { id: true } } }
-      });
-      
-      if (cupom.lojaId !== usuario?.loja?.id) {
-        throw new Error('Você só pode atualizar cupons da sua própria loja');
-      }
-    }
-
-    if (data.codigo && data.codigo !== cupom.codigo) {
-      const existing = await prisma.cupom.findUnique({
-        where: { codigo: data.codigo }
-      });
-      if (existing) throw new Error('Código de cupom já existe');
-    }
-
-    if (data.dataExpiracao) {
-      const dataExp = new Date(data.dataExpiracao);
-      if (dataExp <= new Date()) {
-        throw new Error('Data de expiração deve ser futura');
-      }
-    }
-
-    const updateData = {};
-    
-    if (data.codigo) updateData.codigo = data.codigo;
-    if (data.descricao) updateData.descricao = data.descricao;
-    if (data.quantidadePorCliente) updateData.quantidadePorCliente = data.quantidadePorCliente;
-    if (data.dataExpiracao) updateData.dataExpiracao = new Date(data.dataExpiracao);
-    if (data.logo) updateData.logo = data.logo;
-    if (data.precoOriginal !== undefined) updateData.precoOriginal = data.precoOriginal;
-    if (data.precoComDesconto !== undefined) updateData.precoComDesconto = data.precoComDesconto;
-    if (data.percentualDesconto !== undefined) updateData.percentualDesconto = data.percentualDesconto;
-    if (data.nomeProduto !== undefined) updateData.nomeProduto = data.nomeProduto;
-
-    console.log('📝 [service] Dados para update:', updateData);
-
-    const cupomAtualizado = await prisma.cupom.update({
-      where: { id },
-      data: updateData
-    });
-
-    return cupomAtualizado;
-  }
-
- async deleteCupom(id, usuarioLogado = null) {
-  const cupom = await prisma.cupom.findUnique({
-    where: { id }
-  });
-  
-  if (!cupom) throw new Error('Cupom não encontrado');
-
-  if (usuarioLogado?.role !== 'superadmin' && usuarioLogado?.role !== 'admin') {
-    throw new Error('Apenas superadmin e admin podem deletar cupons');
-  }
-
-  // 🔥 PRIMEIRO: deleta todos os resgates vinculados a este cupom
-  await prisma.resgate.deleteMany({
-    where: { cupomId: id }
-  });
-
-  // 🔥 DEPOIS: deleta o cupom
-  return prisma.cupom.delete({ where: { id } });
-}
-
-  async gerarQrCodes(id, quantidade = 1, usuarioLogado = null) {
-    const cupom = await prisma.cupom.findUnique({
-      where: { id }
-    });
-    
-    if (!cupom) throw new Error('Cupom não encontrado');
-
-    if (usuarioLogado?.role === 'loja') {
-      const usuario = await prisma.usuario.findUnique({
-        where: { id: usuarioLogado.id },
-        select: { loja: { select: { id: true } } }
-      });
-      
-      if (cupom.lojaId !== usuario?.loja?.id) {
-        throw new Error('Você só pode gerar QR codes para cupons da sua própria loja');
-      }
-    }
-
-    const cupomAtualizado = await prisma.cupom.update({
-      where: { id },
-      data: {
-        totalQrCodes: {
-          increment: parseInt(quantidade)
-        }
-      }
-    });
-
-    return [{
-      mensagem: `${quantidade} QR codes adicionados. Total agora: ${cupomAtualizado.totalQrCodes}`,
-      totalQrCodes: cupomAtualizado.totalQrCodes,
-      qrCodesUsados: cupomAtualizado.qrCodesUsados
-    }];
-  }
-
-  // 🔥 Versão otimizada com selects específicos
-  async getEstatisticas(id, usuarioLogado = null) {
-    const cupom = await prisma.cupom.findUnique({
-      where: { id },
-      include: {
-        loja: {
-          select: { nome: true }
-        },
-        resgates: {
-          select: {
-            id: true,
-            quantidade: true,
-            resgatadoEm: true,
-            clienteId: true,
-            cupomId: true,
-            cliente: {
-              select: { nome: true, email: true }
-            }
-          },
-          orderBy: { resgatadoEm: 'desc' }
-        },
-        qrCodesUsadosList: {
-          where: { cupomId: id },
-          select: {
-            clienteId: true,
-            cupomId: true,
-            validado: true,
-            validadoEm: true
-          }
-        }
-      }
-    });
-
-    if (!cupom) throw new Error('Cupom não encontrado');
-
-    if (usuarioLogado?.role === 'loja') {
-      const usuario = await prisma.usuario.findUnique({
-        where: { id: usuarioLogado.id },
-        select: { loja: { select: { id: true } } }
-      });
-      
-      if (cupom.lojaId !== usuario?.loja?.id) {
-        throw new Error('Você só pode ver estatísticas de cupons da sua própria loja');
-      }
-    }
-
-    const qrCodesUsados = cupom.qrCodesUsadosList.length;
-    const qrCodesValidados = cupom.qrCodesUsadosList.filter(qr => qr.validado).length;
-    const qrCodesDisponiveis = cupom.totalQrCodes - qrCodesUsados;
-
-    const totalResgates = cupom.resgates.reduce((acc, r) => acc + r.quantidade, 0);
-    const clientesAtendidos = cupom.resgates.length;
-
-    const qrCodesPorResgate = new Map();
-    cupom.qrCodesUsadosList.forEach(qr => {
-      const chave = `${qr.clienteId}-${qr.cupomId}`;
-      qrCodesPorResgate.set(chave, qr);
-    });
-
-    let valorTotalResgatado = 0;
-    let valorTotalVendido = 0;
-    let resgatesValidados = 0;
-    let resgatesPendentes = 0;
-
-    const resgatesDetalhados = cupom.resgates.map(resgate => {
-      const chave = `${resgate.clienteId}-${resgate.cupomId}`;
-      const qrCode = qrCodesPorResgate.get(chave);
-      
-      const validado = qrCode?.validado || false;
-      const validadoEm = qrCode?.validadoEm || null;
-      
-      const precoUnitarioOriginal = cupom.precoOriginal || 0;
-      const precoUnitarioPago = cupom.precoComDesconto || cupom.precoOriginal || 0;
-      
-      const valorOriginal = precoUnitarioOriginal * resgate.quantidade;
-      const valorPago = precoUnitarioPago * resgate.quantidade;
-      
-      valorTotalResgatado += valorOriginal;
-      
-      if (validado) {
-        valorTotalVendido += valorPago;
-        resgatesValidados += resgate.quantidade;
-      } else {
-        resgatesPendentes += resgate.quantidade;
-      }
-      
-      return {
-        id: resgate.id,
-        cliente: resgate.cliente.nome,
-        quantidade: resgate.quantidade,
-        resgatadoEm: resgate.resgatadoEm,
-        validado,
-        validadoEm,
-        valorOriginal,
-        valorPago: validado ? valorPago : 0
-      };
-    });
-
-    const valorTotalEconomizado = valorTotalResgatado - valorTotalVendido;
-    const mediaTicket = resgatesValidados > 0 ? valorTotalVendido / resgatesValidados : 0;
-    const taxaConversao = totalResgates > 0 ? (resgatesValidados / totalResgates) * 100 : 0;
-
-    return {
-      cupom: {
-        id: cupom.id,
-        codigo: cupom.codigo,
-        descricao: cupom.descricao,
-        loja: cupom.loja.nome,
-        totalQrCodes: cupom.totalQrCodes,
-        qrCodesUsados,
-        precoOriginal: cupom.precoOriginal,
-        precoComDesconto: cupom.precoComDesconto,
-        percentualDesconto: cupom.percentualDesconto,
-        nomeProduto: cupom.nomeProduto
-      },
-      estatisticas: {
-        totalQrCodes: cupom.totalQrCodes,
-        qrCodesUsados,
-        qrCodesValidados,
-        qrCodesDisponiveis,
-        totalResgates,
-        clientesAtendidos,
-        valorTotalResgatado,
-        valorTotalVendido,
-        valorTotalEconomizado,
-        mediaTicket,
-        taxaConversao,
-        resgatesPendentes,
-        resgatesValidados
-      },
-      resgates: resgatesDetalhados
-    };
-  }
-
+  /**
+   * Buscar cupons do lojista logado
+   */
   async getCuponsByLojista(usuarioLogado) {
     if (usuarioLogado.role !== 'loja') {
       throw new Error('Apenas lojistas podem acessar esta rota');
     }
 
-    const usuario = await prisma.usuario.findUnique({
-      where: { id: usuarioLogado.id },
-      select: { 
-        loja: { 
-          select: { id: true } 
-        } 
-      }
-    });
+    // USA REPOSITORY
+    const lojaDoUsuario = await this.repository.findLojaByUsuarioId(usuarioLogado.id);
 
-    if (!usuario?.loja) {
+    if (!lojaDoUsuario) {
       throw new Error('Você não possui uma loja associada');
     }
 
-    return this.repository.findByLoja(usuario.loja.id);
+    return this.repository.findByLoja(lojaDoUsuario.id);
   }
 
-  async validarResgate(clienteId, cupomId) {
-    const cupom = await prisma.cupom.findUnique({
-      where: { id: cupomId },
-      include: { loja: true }
-    });
+  /**
+   * Atualizar cupom
+   */
+  async updateCupom(id, data, usuarioLogado = null) {
+    console.log('🔄 [SERVICE] updateCupom - INÍCIO:', { id, usuarioId: usuarioLogado?.id });
 
+    // USA REPOSITORY
+    const cupom = await this.repository.findById(id);
+    
     if (!cupom) throw new Error('Cupom não encontrado');
-    if (!cupom.loja.payment) throw new Error('Loja com pagamento pendente');
-    if (new Date() > cupom.dataExpiracao) throw new Error('Cupom expirado');
-    if (cupom.qrCodesUsados >= cupom.totalQrCodes) {
-      throw new Error('Todos os QR codes deste cupom já foram usados');
+
+    // Verificar permissão para lojista (USA REPOSITORY)
+    if (usuarioLogado?.role === 'loja') {
+      const lojaDoUsuario = await this.repository.findLojaByUsuarioId(usuarioLogado.id);
+      
+      if (!lojaDoUsuario) {
+        throw new Error('Loja não encontrada para este usuário');
+      }
+
+      if (cupom.lojaId !== lojaDoUsuario.id) {
+        throw new Error('Você só pode atualizar cupons da sua própria loja');
+      }
     }
 
-    const resgate = await prisma.resgate.findFirst({
-      where: {
-        clienteId,
-        cupomId
+    // Verificar código único se alterado (USA REPOSITORY)
+    if (data.codigo && data.codigo !== cupom.codigo) {
+      const existing = await this.repository.findByCodigo(data.codigo);
+      if (existing) throw new Error('Código de cupom já existe');
+    }
+
+    // Validar data de expiração
+    if (data.dataExpiracao) {
+      const dataExp = new Date(data.dataExpiracao);
+      if (dataExp <= new Date()) {
+        throw new Error('Data de expiração deve ser futura');
+      }
+      data.dataExpiracao = dataExp;
+    }
+
+    // Preparar dados para atualização (remover undefined)
+    const updateData = {};
+    const camposPermitidos = [
+      'codigo', 'descricao', 'quantidadePorCliente', 'dataExpiracao',
+      'logo', 'precoOriginal', 'precoComDesconto', 'percentualDesconto',
+      'nomeProduto', 'ativo'
+    ];
+
+    camposPermitidos.forEach(campo => {
+      if (data[campo] !== undefined) {
+        updateData[campo] = data[campo];
       }
     });
 
-    const quantidadeAtual = resgate ? resgate.quantidade : 0;
+    // USA REPOSITORY
+    const cupomAtualizado = await this.repository.update(id, updateData);
+    return cupomAtualizado;
+  }
 
-    if (quantidadeAtual >= cupom.quantidadePorCliente) {
-      throw new Error(`Limite de resgates atingido (${quantidadeAtual}/${cupom.quantidadePorCliente})`);
+  /**
+   * Deletar cupom
+   */
+  async deleteCupom(id, usuarioId, userRole) {
+    console.log('🗑️ [SERVICE] deleteCupom - INÍCIO:', { id, usuarioId, userRole });
+
+    // USA REPOSITORY
+    const cupom = await this.repository.findById(id);
+    
+    if (!cupom) {
+      throw new Error('Cupom não encontrado');
     }
 
+    // Admin e Superadmin podem deletar qualquer cupom
+    if (userRole === 'admin' || userRole === 'superadmin') {
+      await this.repository.delete(id);
+      return { message: 'Cupom deletado com sucesso' };
+    }
+
+    // LOJISTA só pode deletar cupons da própria loja (USA REPOSITORY)
+    if (userRole === 'loja') {
+      const lojaDoUsuario = await this.repository.findLojaByUsuarioId(usuarioId);
+      
+      if (!lojaDoUsuario) {
+        throw new Error('Loja não encontrada para este usuário');
+      }
+
+      if (cupom.lojaId !== lojaDoUsuario.id) {
+        throw new Error('Você só pode deletar cupons da sua própria loja');
+      }
+
+      await this.repository.delete(id);
+      return { message: 'Cupom deletado com sucesso' };
+    }
+
+    throw new Error('Apenas superadmin, admin e loja podem deletar cupons');
+  }
+
+  /**
+   * Gerar QR codes adicionais
+   */
+  async gerarQrCodes(id, quantidade = 1, usuarioLogado = null) {
+    // USA REPOSITORY
+    const cupom = await this.repository.findById(id);
+    
+    if (!cupom) throw new Error('Cupom não encontrado');
+
+    // Verificar permissão para lojista (USA REPOSITORY)
+    if (usuarioLogado?.role === 'loja') {
+      const lojaDoUsuario = await this.repository.findLojaByUsuarioId(usuarioLogado.id);
+      
+      if (!lojaDoUsuario) {
+        throw new Error('Loja não encontrada para este usuário');
+      }
+
+      if (cupom.lojaId !== lojaDoUsuario.id) {
+        throw new Error('Você só pode gerar QR codes para cupons da sua própria loja');
+      }
+    }
+
+    // USA REPOSITORY
+    const cupomAtualizado = await this.repository.update(id, {
+      totalQrCodes: cupom.totalQrCodes + parseInt(quantidade)
+    });
+
     return {
-      podeResgatar: true,
-      quantidadeAtual,
-      restantes: cupom.quantidadePorCliente - quantidadeAtual
+      mensagem: `${quantidade} QR codes adicionados. Total agora: ${cupomAtualizado.totalQrCodes}`,
+      totalQrCodes: cupomAtualizado.totalQrCodes,
+      qrCodesUsados: cupomAtualizado.qrCodesUsados
     };
+  }
+
+/**
+ * Estatísticas detalhadas do cupom
+ */
+async getEstatisticas(id, usuarioLogado = null) {
+  console.log('📊 [SERVICE] getEstatisticas - INÍCIO:', { id, usuarioId: usuarioLogado?.id });
+
+  const cupom = await this.repository.findByIdWithStats(id);
+  if (!cupom) throw new Error('Cupom não encontrado');
+
+  // Verificar permissão para lojista
+  if (usuarioLogado?.role === 'loja') {
+    const lojaDoUsuario = await this.repository.findLojaByUsuarioId(usuarioLogado.id);
+    if (!lojaDoUsuario) throw new Error('Loja não encontrada para este usuário');
+    if (cupom.lojaId !== lojaDoUsuario.id) {
+      throw new Error('Você só pode ver estatísticas de cupons da sua própria loja');
+    }
+  }
+
+  // Estatísticas básicas
+  const qrCodesUsados = cupom.qrCodesUsadosList?.length || 0;
+  const qrCodesValidados = cupom.qrCodesUsadosList?.filter(qr => qr.validado).length || 0;
+  const qrCodesDisponiveis = cupom.totalQrCodes - qrCodesUsados;
+
+  const totalResgates = cupom.resgates?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
+  
+  // 🔥 CORREÇÃO: Calcular clientes únicos (NÃO usar length!)
+  const clientesUnicos = new Set();
+  cupom.resgates?.forEach(resgate => {
+    clientesUnicos.add(resgate.clienteId);
+  });
+  const clientesAtendidos = clientesUnicos.size;
+
+  // Mapa de validações por resgateId
+  const validacoesMap = new Map();
+  cupom.qrCodesUsadosList?.forEach(qr => {
+    if (qr.resgateId) {
+      validacoesMap.set(qr.resgateId, qr);
+    }
+  });
+
+  // Calcular valores financeiros
+  let valorTotalResgatado = 0;
+  let valorTotalVendido = 0;
+  let valorTotalEconomizado = 0;
+  let resgatesValidados = 0;
+  let resgatesPendentes = 0;
+
+  const resgatesDetalhados = cupom.resgates?.map(resgate => {
+    const qrCode = validacoesMap.get(resgate.id);
+    const validado = qrCode?.validado || false;
+    
+    const precoOriginal = cupom.precoOriginal || 0;
+    const precoComDesconto = cupom.precoComDesconto || precoOriginal;
+    
+    const valorOriginal = precoOriginal * resgate.quantidade;
+    const valorPago = precoComDesconto * resgate.quantidade;
+    const economiaPorResgate = (precoOriginal - precoComDesconto) * resgate.quantidade;
+    
+    valorTotalResgatado += valorOriginal;
+    
+    if (validado) {
+      valorTotalVendido += valorPago;
+      valorTotalEconomizado += economiaPorResgate;
+      resgatesValidados += 1;
+    } else {
+      resgatesPendentes += 1;
+    }
+    
+    return {
+      id: resgate.id,
+      cliente: resgate.cliente.nome,
+      quantidade: resgate.quantidade,
+      resgatadoEm: resgate.resgatadoEm,
+      validado,
+      validadoEm: qrCode?.validadoEm || null,
+      valorOriginal,
+      valorPago: validado ? valorPago : 0,
+      economia: validado ? economiaPorResgate : 0
+    };
+  }) || [];
+
+  const mediaTicket = resgatesValidados > 0 ? valorTotalVendido / resgatesValidados : 0;
+  const taxaConversao = totalResgates > 0 ? (resgatesValidados / totalResgates) * 100 : 0;
+
+  return {
+    cupom: {
+      id: cupom.id,
+      codigo: cupom.codigo,
+      descricao: cupom.descricao,
+      loja: cupom.loja.nome,
+      totalQrCodes: cupom.totalQrCodes,
+      qrCodesUsados,
+      precoOriginal: cupom.precoOriginal,
+      precoComDesconto: cupom.precoComDesconto,
+      percentualDesconto: cupom.percentualDesconto,
+      nomeProduto: cupom.nomeProduto
+    },
+    estatisticas: {
+      totalQrCodes: cupom.totalQrCodes,
+      qrCodesUsados,
+      qrCodesValidados,
+      qrCodesDisponiveis,
+      totalResgates,
+      clientesAtendidos,  // ← AGORA CORRETO (1, não 4)
+      resgatesValidados,
+      resgatesPendentes,
+      valorTotalResgatado,
+      valorTotalVendido,
+      valorTotalEconomizado,
+      mediaTicket,
+      taxaConversao
+    },
+    resgates: resgatesDetalhados
+  };
+}
+
+  /**
+   * Ativar cupom
+   */
+  async ativarCupom(id, usuarioId, userRole) {
+    console.log('🔛 [SERVICE] ativarCupom - INÍCIO:', { id, usuarioId, userRole });
+
+    // USA REPOSITORY
+    const cupom = await this.repository.findById(id);
+    
+    if (!cupom) {
+      throw new Error('Cupom não encontrado');
+    }
+
+    // Verificar permissão para lojista (USA REPOSITORY)
+    if (userRole === 'loja') {
+      const lojaDoUsuario = await this.repository.findLojaByUsuarioId(usuarioId);
+      
+      if (!lojaDoUsuario) {
+        throw new Error('Loja não encontrada para este usuário');
+      }
+
+      if (cupom.lojaId !== lojaDoUsuario.id) {
+        throw new Error('Você só pode ativar cupons da sua própria loja');
+      }
+    }
+
+    // USA REPOSITORY
+    const cupomAtualizado = await this.repository.update(id, { ativo: true });
+    return cupomAtualizado;
+  }
+
+  /**
+   * Desativar cupom
+   */
+  async desativarCupom(id, usuarioId, userRole) {
+    console.log('🔚 [SERVICE] desativarCupom - INÍCIO:', { id, usuarioId, userRole });
+
+    // USA REPOSITORY
+    const cupom = await this.repository.findById(id);
+    
+    if (!cupom) {
+      throw new Error('Cupom não encontrado');
+    }
+
+    // Verificar permissão para lojista (USA REPOSITORY)
+    if (userRole === 'loja') {
+      const lojaDoUsuario = await this.repository.findLojaByUsuarioId(usuarioId);
+      
+      if (!lojaDoUsuario) {
+        throw new Error('Loja não encontrada para este usuário');
+      }
+
+      if (cupom.lojaId !== lojaDoUsuario.id) {
+        throw new Error('Você só pode desativar cupons da sua própria loja');
+      }
+    }
+
+    // USA REPOSITORY
+    const cupomAtualizado = await this.repository.update(id, { ativo: false });
+    return cupomAtualizado;
   }
 }
 

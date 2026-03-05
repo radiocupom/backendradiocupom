@@ -18,99 +18,129 @@ class DashboardLojaService {
     return loja;
   }
 
-  /**
-   * KPIs principais da loja com dados financeiros
-   */
-  async getKPIs(usuarioId) {
-    const loja = await this.getLojaByUsuarioId(usuarioId);
+/**
+ * KPIs principais da loja com dados financeiros
+ */
+async getKPIs(usuarioId) {
+  const loja = await this.getLojaByUsuarioId(usuarioId);
 
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
 
-    const inicioMes = new Date(hoje);
-    inicioMes.setDate(1);
+  const inicioMes = new Date(hoje);
+  inicioMes.setDate(1);
 
-    const inicioSemana = new Date(hoje);
-    inicioSemana.setDate(hoje.getDate() - hoje.getDay());
+  const inicioSemana = new Date(hoje);
+  inicioSemana.setDate(hoje.getDate() - hoje.getDay());
 
-    // Buscar dados CRUS do repository
-    const [
-      totalCupons,
-      cuponsAtivos,
-      totalResgates,
-      resgatesHoje,
-      resgatesSemana,
-      resgatesMes,
-      totalQrCodes,
-      qrCodesValidados,
-      totalClientes,
-      resgatesComValores,
-      qrCodesValidadosLista
-    ] = await Promise.all([
-      this.repository.countCupons(loja.id),
-      this.repository.countCuponsAtivos(loja.id),
-      this.repository.countResgates(loja.id),
-      this.repository.countResgatesPorPeriodo(loja.id, hoje),
-      this.repository.countResgatesPorPeriodo(loja.id, inicioSemana),
-      this.repository.countResgatesPorPeriodo(loja.id, inicioMes),
-      this.repository.countQrCodes(loja.id),
-      this.repository.countQrCodes(loja.id, true),
-      this.repository.countClientesUnicos(loja.id),
-      this.repository.findResgatesComValores(loja.id),
-      this.repository.findQrCodesValidados(loja.id, null, null, 10000)
-    ]);
+  // Buscar dados CRUS do repository
+  const [
+    totalCupons,
+    cuponsAtivos,
+    totalResgates,
+    resgatesHoje,
+    resgatesSemana,
+    resgatesMes,
+    totalQrCodes,
+    qrCodesValidados,
+    totalClientes,
+    resgatesComValores,
+    qrCodesValidadosLista,
+    resgatesComQRValidados
+  ] = await Promise.all([
+    this.repository.countCupons(loja.id),
+    this.repository.countCuponsAtivos(loja.id),
+    this.repository.countResgates(loja.id),
+    this.repository.countResgatesPorPeriodo(loja.id, hoje),
+    this.repository.countResgatesPorPeriodo(loja.id, inicioSemana),
+    this.repository.countResgatesPorPeriodo(loja.id, inicioMes),
+    this.repository.countQrCodes(loja.id),
+    this.repository.countQrCodes(loja.id, true),
+    this.repository.countClientesUnicos(loja.id),
+    this.repository.findResgatesComValores(loja.id),
+    this.repository.findQrCodesValidados(loja.id, null, null, 10000),
+    this.repository.findResgatesComQRValidados(loja.id)
+  ]);
 
-    // REGRAS DE NEGÓCIO: Cálculos financeiros
-    const valorTotalResgatado = resgatesComValores.reduce((acc, r) => {
-      return acc + (r.cupom.precoOriginal || 0) * (r.quantidade || 1);
-    }, 0);
+  // ================= REGRAS DE NEGÓCIO: Cálculos financeiros =================
 
-    const valorTotalVendido = qrCodesValidadosLista.reduce((acc, qr) => {
-      return acc + (qr.cupom.precoComDesconto || qr.cupom.precoOriginal || 0);
-    }, 0);
+  // 1. Valor Total Resgatado (SOMA DE TODOS OS RESGATES - preço original)
+  const valorTotalResgatado = resgatesComValores.reduce((acc, r) => {
+    return acc + (r.cupom.precoOriginal || 0) * (r.quantidade || 1);
+  }, 0);
 
-    const valorTotalEconomizado = valorTotalResgatado - valorTotalVendido;
+  // 2. Valor Total Vendido e Economia Real (APENAS resgates validados)
+  let valorTotalVendido = 0;
+  let valorTotalEconomizado = 0; // ← AGORA CALCULADO CORRETAMENTE
 
-    const ticketMedio = qrCodesValidados > 0 
-      ? valorTotalVendido / qrCodesValidados 
-      : 0;
+  resgatesComQRValidados.forEach(resgate => {
+    // Filtrar APENAS os QR codes validados deste resgate
+    const qrCodesValidados = resgate.qrCodes?.filter(qr => qr.validado) || [];
+    const quantidadeValidada = qrCodesValidados.length;
+    
+    const precoOriginal = resgate.cupom.precoOriginal || 0;
+    const precoComDesconto = resgate.cupom.precoComDesconto || precoOriginal;
+    
+    // Valor vendido (preço com desconto * quantidade validada)
+    valorTotalVendido += precoComDesconto * quantidadeValidada;
+    
+    // 🔥 ECONOMIA REAL = (preço original - preço com desconto) * quantidade validada
+    const economiaPorItem = (precoOriginal - precoComDesconto) * quantidadeValidada;
+    valorTotalEconomizado += economiaPorItem;
+  });
 
-    const cuponsComPreco = await this.repository.countCuponsComPreco(loja.id);
+  // 3. Ticket Médio (apenas considerando validações)
+  const ticketMedio = qrCodesValidados > 0 
+    ? valorTotalVendido / qrCodesValidados 
+    : 0;
 
-    return {
-      loja: {
-        id: loja.id,
-        nome: loja.nome
-      },
-      cupons: {
-        total: totalCupons,
-        ativos: cuponsAtivos,
-        expirados: totalCupons - cuponsAtivos,
-        comPreco: cuponsComPreco
-      },
-      resgates: {
-        total: totalResgates,
-        hoje: resgatesHoje,
-        semana: resgatesSemana,
-        mes: resgatesMes
-      },
-      qrCodes: {
-        total: totalQrCodes,
-        validados: qrCodesValidados,
-        pendentes: totalQrCodes - qrCodesValidados
-      },
-      clientes: {
-        total: totalClientes
-      },
-      financeiro: {
-        valorTotalResgatado,
-        valorTotalVendido,
-        valorTotalEconomizado,
-        ticketMedio
-      }
-    };
-  }
+  // 4. Cupons com preço
+  const cuponsComPreco = await this.repository.countCuponsComPreco(loja.id);
 
+  // ================= LOG PARA DEBUG =================
+  console.log('📊 [getKPIs] Cálculos financeiros:', {
+    valorTotalResgatado,
+    valorTotalVendido,
+    valorTotalEconomizado,
+    ticketMedio,
+    qrCodesValidados,
+    totalResgatesComValidacao: resgatesComQRValidados.length
+  });
+
+  // ================= RETORNO =================
+  return {
+    loja: {
+      id: loja.id,
+      nome: loja.nome
+    },
+    cupons: {
+      total: totalCupons,
+      ativos: cuponsAtivos,
+      expirados: totalCupons - cuponsAtivos,
+      comPreco: cuponsComPreco
+    },
+    resgates: {
+      total: totalResgates,
+      hoje: resgatesHoje,
+      semana: resgatesSemana,
+      mes: resgatesMes
+    },
+    qrCodes: {
+      total: totalQrCodes,
+      validados: qrCodesValidados,
+      pendentes: totalQrCodes - qrCodesValidados
+    },
+    clientes: {
+      total: totalClientes
+    },
+    financeiro: {
+      valorTotalResgatado,
+      valorTotalVendido,
+      valorTotalEconomizado, // ← AGORA É O DESCONTO REAL
+      ticketMedio
+    }
+  };
+}
  /**
  * Últimos resgates da loja com valores e status
  */

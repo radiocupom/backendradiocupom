@@ -8,6 +8,7 @@ class FrontCupomController {
     try {
       const cupons = await prisma.cupom.findMany({
         where: {
+          ativo: true,  // ← NOVO FILTRO!
           dataExpiracao: {
             gt: new Date() // Apenas não expirados
           },
@@ -22,6 +23,7 @@ class FrontCupomController {
           logo: true,
           dataExpiracao: true,
           quantidadePorCliente: true,
+          ativo: true,  // ← Incluir no select (opcional)
           // 🔥 NOVOS CAMPOS DE PREÇO
           precoOriginal: true,
           precoComDesconto: true,
@@ -84,6 +86,7 @@ class FrontCupomController {
       const cupons = await prisma.cupom.findMany({
         where: {
           lojaId: lojaId,
+          ativo: true,  // ← NOVO FILTRO!
           dataExpiracao: {
             gt: new Date() // Apenas não expirados
           }
@@ -95,6 +98,7 @@ class FrontCupomController {
           logo: true,
           dataExpiracao: true,
           quantidadePorCliente: true,
+          ativo: true,  // ← Incluir no select (opcional)
           // 🔥 NOVOS CAMPOS DE PREÇO
           precoOriginal: true,
           precoComDesconto: true,
@@ -141,6 +145,7 @@ class FrontCupomController {
           logo: true,
           dataExpiracao: true,
           quantidadePorCliente: true,
+          ativo: true,  // ← Incluir no select
           // 🔥 NOVOS CAMPOS DE PREÇO
           precoOriginal: true,
           precoComDesconto: true,
@@ -161,6 +166,14 @@ class FrontCupomController {
         return res.status(404).json({
           success: false,
           error: 'Cupom não encontrado'
+        });
+      }
+
+      // Verificar se está ativo
+      if (!cupom.ativo) {  // ← NOVA VERIFICAÇÃO!
+        return res.status(400).json({
+          success: false,
+          error: 'Este cupom está desativado'
         });
       }
 
