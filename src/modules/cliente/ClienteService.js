@@ -2,6 +2,16 @@
 const ClienteRepository = require('./ClienteRepository');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const cache = require('../../cache/cacheHelper');
+
+const serializeFilters = (filters = {}) => {
+  const keys = Object.keys(filters).sort();
+  const obj = {};
+  for (const key of keys) {
+    obj[key] = filters[key];
+  }
+  return JSON.stringify(obj);
+};
 
 class ClienteService {
   constructor() {
@@ -104,7 +114,10 @@ class ClienteService {
     const { senha: _, ...clienteSemSenha } = cliente;
     
     this.log('log', 'createCliente - Cliente criado', { id: cliente.id });
-    
+
+    // Invalidate caches que dependem da lista de clientes / estatísticas
+    await cache.delCacheByPrefix('clientes:');
+
     return clienteSemSenha;
   }
 
@@ -159,11 +172,17 @@ class ClienteService {
   async getAllClientes(page = 1, limit = 20, filters = {}, sortBy = 'createdAt', sortOrder = 'desc') {
     this.log('log', 'getAllClientes', { page, limit, filters, sortBy, sortOrder });
 
+    const filterKey = serializeFilters(filters);
+    const cacheKey = `clientes:all:${page}:${limit}:${sortBy}:${sortOrder}:${filterKey}`;
+
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
+
     const skip = (page - 1) * limit;
 
     const result = await this.repository.findAll(skip, limit, filters, sortBy, sortOrder);
 
-    return {
+    const response = {
       clientes: result.clientes,
       pagination: {
         page,
@@ -174,6 +193,9 @@ class ClienteService {
         hasPrev: page > 1
       }
     };
+
+    await cache.setCache(cacheKey, response, 30);
+    return response;
   }
 
   async getClienteById(id) {
@@ -197,6 +219,10 @@ class ClienteService {
   // ================= ESTATÍSTICAS GERAIS =================
   async getEstatisticasGerais() {
     this.log('log', 'getEstatisticasGerais');
+
+    const cacheKey = 'clientes:estatisticas-gerais';
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
 
     const [
       totalClientes,
@@ -224,7 +250,7 @@ class ClienteService {
       ? Number(((qrCodesValidados / totalQrCodes) * 100).toFixed(1))
       : 0;
 
-    return {
+    const result = {
       clientes: {
         total: totalClientes,
         ativos: clientesAtivos,
@@ -247,11 +273,18 @@ class ClienteService {
       },
       topClientes
     };
+
+    await cache.setCache(cacheKey, result, 60);
+    return result;
   }
 
   // ================= ESTATÍSTICAS DO CLIENTE =================
   async getEstatisticasCliente(id) {
     this.log('log', 'getEstatisticasCliente', { id });
+
+    const cacheKey = `clientes:estatisticas:${id}`;
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
 
     const cliente = await this.repository.findEstatisticas(id);
     if (!cliente) throw new Error('Cliente não encontrado');
@@ -288,7 +321,7 @@ class ClienteService {
     const qrCodesValidados = qrCodes.qrCodes.filter(q => q.validado).length;
     const qrCodesPendentes = qrCodes.qrCodes.filter(q => !q.validado).length;
 
-    return {
+    const result = {
       cliente: {
         id: cliente.id,
         nome: cliente.nome,
@@ -324,6 +357,9 @@ class ClienteService {
           : this.formatarMoeda(0)
       }
     };
+
+    await cache.setCache(cacheKey, result, 60);
+    return result;
   }
 
   // ================= RESGATES =================
@@ -715,7 +751,10 @@ async getClientesByLoja(lojaId, page = 1, limit = 20, filters = {}, sortBy = 'ul
     const clienteAtualizado = await this.repository.update(id, data);
     
     this.log('log', 'updateCliente - Cliente atualizado', { id });
-    
+
+    // Invalidate caches que dependem de dados de clientes
+    await cache.delCacheByPrefix('clientes:');
+
     return clienteAtualizado;
   }
 
@@ -737,7 +776,10 @@ async getClientesByLoja(lojaId, page = 1, limit = 20, filters = {}, sortBy = 'ul
     await this.repository.delete(id);
     
     this.log('log', 'deleteCliente - Cliente excluído', { id });
-    
+
+    // Invalidate caches que dependem de listas/estatísticas de clientes
+    await cache.delCacheByPrefix('clientes:');
+
     return true;
   }
 }

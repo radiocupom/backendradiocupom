@@ -1,4 +1,5 @@
 const DashboardRepository = require('./dashboard.repository');
+const cache = require('../../cache/cacheHelper');
 
 class DashboardService {
   constructor() {
@@ -9,6 +10,10 @@ class DashboardService {
    * KPIs principais do sistema (visão global)
    */
   async getKPIs() {
+    const cacheKey = 'dashboard:kpis';
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
+
     const [
       totalLojas,
       lojasAtivas,
@@ -57,7 +62,7 @@ class DashboardService {
       ? (qrCodesValidados / totalResgates) * 100 
       : 0;
 
-    return {
+    const result = {
       // Lojas
       totalLojas,
       lojasAtivas,
@@ -93,6 +98,11 @@ class DashboardService {
       ticketMedio,
       taxaConversao
     };
+
+    // Cache curto para aliviar consultas pesadas ao banco
+    await cache.setCache(cacheKey, result, 60); // ttl: 60s
+
+    return result;
   }
 
   /**

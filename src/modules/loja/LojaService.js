@@ -3,6 +3,7 @@ const LojaRepository = require('./LojaRepository');
 const bcrypt = require('bcrypt');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const cache = require('../../cache/cacheHelper');
 
 class LojaService {
   constructor() {
@@ -14,6 +15,9 @@ class LojaService {
    */
   async createLoja(data) {
     const { nome, email, senha, logo, categoria, descricao } = data;
+
+    // Invalidate cache de lojas
+    await cache.delCacheByPrefix('lojas:');
 
     if (!nome || !email || !senha) {
       throw new Error('Nome, email e senha são obrigatórios');
@@ -59,6 +63,9 @@ class LojaService {
       emailUsuario,
       senhaUsuario
     } = data;
+
+    // Invalidate cache de lojas
+    await cache.delCacheByPrefix('lojas:');
 
     if (!nomeLoja || !emailLoja || !senhaLoja || !nomeUsuario || !emailUsuario || !senhaUsuario) {
       throw new Error('Dados da loja e do usuário são obrigatórios');
@@ -130,7 +137,12 @@ class LojaService {
    * Lista todas as lojas COM dados do usuário
    */
   async getAllLojas() {
+    const cacheKey = 'lojas:all';
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
+
     const lojas = await this.repository.findAll();
+    await cache.setCache(cacheKey, lojas, 30);
     return lojas;
   }
 
@@ -138,8 +150,14 @@ class LojaService {
    * Busca loja por ID COM dados do usuário
    */
   async getLojaById(id) {
+    const cacheKey = `lojas:id:${id}`;
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
+
     const loja = await this.repository.findById(id);
     if (!loja) throw new Error('Loja não encontrada');
+
+    await cache.setCache(cacheKey, loja, 60);
     return loja;
   }
 
@@ -148,6 +166,9 @@ class LojaService {
    */
   async atualizarMinhaLoja(usuarioId, data) {
     console.log('📤 Atualizando loja e usuário:', { usuarioId, data });
+
+    // Cache pode estar desatualizado após alteração de dados
+    await cache.delCacheByPrefix('lojas:');
     
     // 🔥 Busca apenas o necessário
     const loja = await prisma.loja.findFirst({
@@ -218,6 +239,9 @@ class LojaService {
    * Atualiza loja
    */
   async updateLoja(id, data) {
+    // Invalidate cache antes de atualizar (para não servir dados antigos)
+    await cache.delCacheByPrefix('lojas:');
+
     const loja = await this.repository.findById(id);
     if (!loja) throw new Error('Loja não encontrada');
 
@@ -258,6 +282,9 @@ class LojaService {
    * Ativa/desativa pagamento da loja
    */
   async togglePayment(id, status) {
+    // Invalidate cache pois o status de pagamento mudou
+    await cache.delCacheByPrefix('lojas:');
+
     const loja = await this.repository.findById(id);
     if (!loja) throw new Error('Loja não encontrada');
 
@@ -269,6 +296,9 @@ class LojaService {
    * Deleta uma loja
    */
   async deleteLoja(id) {
+    // Invalidate cache antes de remover registro
+    await cache.delCacheByPrefix('lojas:');
+
     const loja = await this.repository.findById(id);
     if (!loja) throw new Error('Loja não encontrada');
 
@@ -294,6 +324,10 @@ class LojaService {
    * Busca estatísticas da loja - VERSÃO OTIMIZADA
    */
   async getEstatisticas(id) {
+    const cacheKey = `lojas:estatisticas:${id}`;
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
+
     const loja = await prisma.loja.findUnique({
       where: { id },
       select: {
@@ -326,7 +360,7 @@ class LojaService {
       acc + cupom.resgates.reduce((sum, r) => sum + r.quantidade, 0), 0
     );
 
-    return {
+    const result = {
       lojaId: loja.id,
       nome: loja.nome,
       estatisticas: {
@@ -337,6 +371,9 @@ class LojaService {
           : 0
       }
     };
+
+    await cache.setCache(cacheKey, result, 60);
+    return result;
   }
 }
 

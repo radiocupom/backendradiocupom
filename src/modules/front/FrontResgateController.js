@@ -1,7 +1,11 @@
 const { PrismaClient } = require('@prisma/client');
 const QRCode = require('qrcode');
+const { resgateQueue } = require('../../queues/resgateQueue');
+// Inicializar o processador de resgates
+require('./resgateProcessor');
+
 const prisma = new PrismaClient({
-  log: ['query', 'info', 'warn', 'error'], // Log para debug (opcional)
+  log: ['query', 'info', 'warn', 'error'],
 });
 
 class FrontResgateController {

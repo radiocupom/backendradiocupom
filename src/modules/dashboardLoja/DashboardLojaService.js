@@ -1,4 +1,5 @@
 const DashboardLojaRepository = require('./DashboardLojaRepository');
+const cache = require('../../cache/cacheHelper');
 
 class DashboardLojaService {
   constructor() {
@@ -22,11 +23,14 @@ class DashboardLojaService {
  * KPIs principais da loja com dados financeiros
  */
 async getKPIs(usuarioId) {
-  const loja = await this.getLojaByUsuarioId(usuarioId);
+    const cacheKey = `dashboard-loja:${usuarioId}:kpis`;
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
 
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
+    const loja = await this.getLojaByUsuarioId(usuarioId);
 
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
   const inicioMes = new Date(hoje);
   inicioMes.setDate(1);
 
@@ -108,7 +112,7 @@ async getKPIs(usuarioId) {
   });
 
   // ================= RETORNO =================
-  return {
+  const result = {
     loja: {
       id: loja.id,
       nome: loja.nome
@@ -140,17 +144,25 @@ async getKPIs(usuarioId) {
       ticketMedio
     }
   };
+
+  // Cache curto para aliviar consultas pesadas ao banco
+  await cache.setCache(cacheKey, result, 60); // ttl: 60s
+  return result;
 }
  /**
  * Últimos resgates da loja com valores e status
  */
 async getUltimosResgates(usuarioId, limit = 10) {
+  const cacheKey = `dashboard-loja:${usuarioId}:ultimos-resgates:${limit}`;
+  const cached = await cache.getCache(cacheKey);
+  if (cached) return cached;
+
   const loja = await this.getLojaByUsuarioId(usuarioId);
   
   // Buscar resgates com qrCodes já inclusos pelo repository
   const resgates = await this.repository.findUltimosResgates(loja.id, limit);
   
-  return resgates.map(resgate => {
+  const result = resgates.map(resgate => {
     const qrCodesValidados = resgate.qrCodes?.filter(qr => qr.validado) || [];
     const quantidadeValidada = qrCodesValidados.length;
     
@@ -171,16 +183,23 @@ async getUltimosResgates(usuarioId, limit = 10) {
       economia: ((resgate.cupom.precoOriginal || 0) - (resgate.cupom.precoComDesconto || 0)) * quantidadeValidada
     };
   });
+
+  await cache.setCache(cacheKey, result, 30);
+  return result;
 }
   /**
    * Cupons mais resgatados da loja
    */
   async getCuponsPopulares(usuarioId, limit = 5) {
+    const cacheKey = `dashboard-loja:${usuarioId}:cupons-populares:${limit}`;
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
+
     const loja = await this.getLojaByUsuarioId(usuarioId);
     
     const cupons = await this.repository.findCuponsMaisResgatados(loja.id, limit);
 
-    return cupons.map(cupom => ({
+    const result = cupons.map(cupom => ({
       id: cupom.id,
       descricao: cupom.descricao,
       codigo: cupom.codigo,
@@ -192,12 +211,19 @@ async getUltimosResgates(usuarioId, limit = 10) {
       dataExpiracao: cupom.dataExpiracao,
       valorTotalGerado: (cupom.precoComDesconto || 0) * (cupom._count.resgates || 0)
     }));
+
+    await cache.setCache(cacheKey, result, 30);
+    return result;
   }
 
   /**
    * Resgates por dia (últimos 7 dias)
    */
   async getResgatesPorDia(usuarioId) {
+    const cacheKey = `dashboard-loja:${usuarioId}:resgates-por-dia`;
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
+
     const loja = await this.getLojaByUsuarioId(usuarioId);
 
     const dataFim = new Date();
@@ -229,6 +255,7 @@ async getUltimosResgates(usuarioId, limit = 10) {
       });
     }
 
+    await cache.setCache(cacheKey, dias, 30);
     return dias;
   }
 
@@ -252,6 +279,10 @@ async getUltimosResgates(usuarioId, limit = 10) {
    * Busca estatísticas de validação de QR codes
    */
   async getQrCodeStats(usuarioId) {
+    const cacheKey = `dashboard-loja:${usuarioId}:qr-code-stats`;
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
+
     const loja = await this.getLojaByUsuarioId(usuarioId);
     
     const hoje = new Date();
@@ -287,7 +318,7 @@ async getUltimosResgates(usuarioId, limit = 10) {
     
     const tempoMedioValidacao = await this.getTempoMedioValidacao(usuarioId);
 
-    return {
+    const result = {
       totais: {
         resgatados: totalResgatados,
         validados: totalValidados,
@@ -311,6 +342,9 @@ async getUltimosResgates(usuarioId, limit = 10) {
       taxaValidacao,
       tempoMedioValidacao: tempoMedioValidacao || 0
     };
+
+    await cache.setCache(cacheKey, result, 30);
+    return result;
   }
 
   /**
@@ -381,6 +415,10 @@ async getUltimosResgates(usuarioId, limit = 10) {
    * Todos os dados do dashboard em uma única chamada
    */
   async getDadosCompletos(usuarioId) {
+    const cacheKey = `dashboard-loja:${usuarioId}:dados-completos`;
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
+
     const [
       kpis,
       ultimosResgates,
@@ -395,13 +433,16 @@ async getUltimosResgates(usuarioId, limit = 10) {
       this.getQrCodeStats(usuarioId)
     ]);
 
-    return {
+    const result = {
       kpis,
       ultimosResgates,
       cuponsPopulares,
       resgatesPorDia,
       qrCodeStats
     };
+
+    await cache.setCache(cacheKey, result, 60); // ttl: 60s
+    return result;
   }
 }
 

@@ -2,6 +2,7 @@
 const prisma = require('../../database/prismaClient.cjs');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const cache = require('../../cache/cacheHelper');
 const {
   createUsuario,
   findAllUsuarios,
@@ -45,6 +46,9 @@ const criarUsuario = async (nome, email, senha, role = 'loja') => {
     role 
   });
   
+  // Invalida cache gravemente impactado por usuários novos
+  await cache.delCacheByPrefix('usuarios:');
+
   return removeSenha(usuario);
 };
 
@@ -86,6 +90,10 @@ const autenticar = async (email, senha) => {
 
 // 🔥 Versões otimizadas com SELECT específico
 const findAllUsuariosSemSenha = async () => {
+  const cacheKey = 'usuarios:all';
+  const cached = await cache.getCache(cacheKey);
+  if (cached) return cached;
+
   const usuarios = await prisma.usuario.findMany({
     select: { // 🔥 SELECT específico
       id: true,
@@ -107,10 +115,15 @@ const findAllUsuariosSemSenha = async () => {
     orderBy: { createdAt: 'desc' }
   });
   
+  await cache.setCache(cacheKey, usuarios, 30);
   return usuarios;
 };
 
 const findUsuarioByIdSemSenha = async (id) => {
+  const cacheKey = `usuarios:id:${id}`;
+  const cached = await cache.getCache(cacheKey);
+  if (cached) return cached;
+
   const usuario = await prisma.usuario.findUnique({
     where: { id },
     select: { // 🔥 SELECT específico
@@ -132,11 +145,17 @@ const findUsuarioByIdSemSenha = async (id) => {
     }
   });
   
+  if (usuario) {
+    await cache.setCache(cacheKey, usuario, 60);
+  }
   return usuario;
 };
 
 // 🔥 Versão otimizada de update
 const updateUsuarioCompleto = async (id, data) => {
+  // Invalidate cache antes de atualizar
+  await cache.delCacheByPrefix('usuarios:');
+
   // Se tiver senha, fazer hash
   if (data.senha) {
     if (data.senha.length < 6) {
@@ -149,11 +168,17 @@ const updateUsuarioCompleto = async (id, data) => {
   return removeSenha(usuario);
 };
 
+const deleteUsuarioCompleto = async (id) => {
+  // Invalidate cache ao remover usuário
+  await cache.delCacheByPrefix('usuarios:');
+  return deleteUsuario(id);
+};
+
 module.exports = {
   criarUsuario,
   autenticar,
   findAllUsuarios: findAllUsuariosSemSenha,
   findUsuarioById: findUsuarioByIdSemSenha,
   updateUsuario: updateUsuarioCompleto,
-  deleteUsuario,
+  deleteUsuario: deleteUsuarioCompleto,
 };

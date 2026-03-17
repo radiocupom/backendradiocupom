@@ -1,4 +1,14 @@
 const CupomRepository = require('./CupomRepository');
+const cache = require('../../cache/cacheHelper');
+
+const serializeFilters = (filters = {}) => {
+  const keys = Object.keys(filters).sort();
+  const obj = {};
+  for (const key of keys) {
+    obj[key] = filters[key];
+  }
+  return JSON.stringify(obj);
+};
 
 class CupomService {
   constructor() {
@@ -92,6 +102,9 @@ class CupomService {
       ativo: true
     });
 
+    // Invalidate cache de cupons/lojas após criar
+    await cache.delCacheByPrefix('cupons:');
+
     console.log('✅ [SERVICE] Cupom criado:', novoCupom.id);
     return novoCupom;
   }
@@ -100,15 +113,23 @@ class CupomService {
    * Listar todos os cupons (admin/superadmin)
    */
   async getAllCupons() {
-    return this.repository.findAll();
+    const cacheKey = 'cupons:all';
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.repository.findAll();
+    await cache.setCache(cacheKey, result, 30);
+    return result;
   }
 
   /**
    * Buscar cupom por ID com verificação de permissão
    */
   async getCupomById(id, usuarioLogado = null) {
-    const cupom = await this.repository.findById(id);
-    
+    const cacheKey = `cupons:id:${id}`;
+    const cached = await cache.getCache(cacheKey);
+    const cupom = cached || await this.repository.findById(id);
+
     if (!cupom) throw new Error('Cupom não encontrado');
     
     // Verificar permissão para lojista (USA REPOSITORY)
@@ -123,7 +144,11 @@ class CupomService {
         throw new Error('Você só pode acessar cupons da sua própria loja');
       }
     }
-    
+
+    if (!cached) {
+      await cache.setCache(cacheKey, cupom, 60);
+    }
+
     return cupom;
   }
 
@@ -131,14 +156,26 @@ class CupomService {
    * Buscar cupons por loja
    */
   async getCuponsByLoja(lojaId) {
-    return this.repository.findByLoja(lojaId);
+    const cacheKey = `cupons:loja:${lojaId}`;
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.repository.findByLoja(lojaId);
+    await cache.setCache(cacheKey, result, 30);
+    return result;
   }
 
   /**
    * Buscar cupons disponíveis (público)
    */
   async getCuponsDisponiveis() {
-    return this.repository.findDisponiveis();
+    const cacheKey = 'cupons:disponiveis';
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.repository.findDisponiveis();
+    await cache.setCache(cacheKey, result, 30);
+    return result;
   }
 
   /**
@@ -156,7 +193,13 @@ class CupomService {
       throw new Error('Você não possui uma loja associada');
     }
 
-    return this.repository.findByLoja(lojaDoUsuario.id);
+    const cacheKey = `cupons:loja:${lojaDoUsuario.id}:lojista`;
+    const cached = await cache.getCache(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.repository.findByLoja(lojaDoUsuario.id);
+    await cache.setCache(cacheKey, result, 30);
+    return result;
   }
 
   /**
@@ -214,6 +257,10 @@ class CupomService {
 
     // USA REPOSITORY
     const cupomAtualizado = await this.repository.update(id, updateData);
+
+    // Invalidate caches relacionados a cupons
+    await cache.delCacheByPrefix('cupons:');
+
     return cupomAtualizado;
   }
 
@@ -233,6 +280,7 @@ class CupomService {
     // Admin e Superadmin podem deletar qualquer cupom
     if (userRole === 'admin' || userRole === 'superadmin') {
       await this.repository.delete(id);
+      await cache.delCacheByPrefix('cupons:');
       return { message: 'Cupom deletado com sucesso' };
     }
 
@@ -249,6 +297,7 @@ class CupomService {
       }
 
       await this.repository.delete(id);
+      await cache.delCacheByPrefix('cupons:');
       return { message: 'Cupom deletado com sucesso' };
     }
 
@@ -282,6 +331,9 @@ class CupomService {
       totalQrCodes: cupom.totalQrCodes + parseInt(quantidade)
     });
 
+    // Invalidate cache pois o cupom mudou
+    await cache.delCacheByPrefix('cupons:');
+
     return {
       mensagem: `${quantidade} QR codes adicionados. Total agora: ${cupomAtualizado.totalQrCodes}`,
       totalQrCodes: cupomAtualizado.totalQrCodes,
@@ -294,6 +346,10 @@ class CupomService {
  */
 async getEstatisticas(id, usuarioLogado = null) {
   console.log('📊 [SERVICE] getEstatisticas - INÍCIO:', { id, usuarioId: usuarioLogado?.id });
+
+  const cacheKey = `cupons:estatisticas:${id}`;
+  const cached = await cache.getCache(cacheKey);
+  if (cached) return cached;
 
   const cupom = await this.repository.findByIdWithStats(id);
   if (!cupom) throw new Error('Cupom não encontrado');
@@ -373,7 +429,7 @@ async getEstatisticas(id, usuarioLogado = null) {
   const mediaTicket = resgatesValidados > 0 ? valorTotalVendido / resgatesValidados : 0;
   const taxaConversao = totalResgates > 0 ? (resgatesValidados / totalResgates) * 100 : 0;
 
-  return {
+  const result = {
     cupom: {
       id: cupom.id,
       codigo: cupom.codigo,
@@ -403,6 +459,9 @@ async getEstatisticas(id, usuarioLogado = null) {
     },
     resgates: resgatesDetalhados
   };
+
+  await cache.setCache(cacheKey, result, 60);
+  return result;
 }
 
   /**
@@ -433,6 +492,7 @@ async getEstatisticas(id, usuarioLogado = null) {
 
     // USA REPOSITORY
     const cupomAtualizado = await this.repository.update(id, { ativo: true });
+    await cache.delCacheByPrefix('cupons:');
     return cupomAtualizado;
   }
 
@@ -464,6 +524,7 @@ async getEstatisticas(id, usuarioLogado = null) {
 
     // USA REPOSITORY
     const cupomAtualizado = await this.repository.update(id, { ativo: false });
+    await cache.delCacheByPrefix('cupons:');
     return cupomAtualizado;
   }
 }
